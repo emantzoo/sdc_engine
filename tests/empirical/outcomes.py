@@ -42,6 +42,10 @@ def run_outcome(
     err: Optional[str] = None
     try:
         with patcher_ctx(threshold_value):
+            # Force Python-only fallback: deterministic, no R/rpy2 variance
+            from sdc_engine.sdc import r_backend as _rb
+            _rb._R_CHECK_CACHE["result"] = False
+
             from sdc_engine.entities.dataset.pandas.dataset import PdDataset
             from sdc_engine.interactors.sdc_protection import SDCProtection
             from sdc_engine.sdc.protection_engine import (

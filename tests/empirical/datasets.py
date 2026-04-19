@@ -28,17 +28,31 @@ class DatasetSpec:
         return pd.read_excel(self.path)
 
 
-# USER: populate this list with your datasets.
-# Each dataset should span at least one threshold's range of values.
 DATASETS: List[DatasetSpec] = [
-    # Example:
-    # DatasetSpec(
-    #     name="adult",
-    #     path=DATA_DIR / "adult.csv",
-    #     quasi_identifiers=["age", "workclass", "education", "marital-status",
-    #                        "occupation", "race", "sex", "native-country"],
-    #     sensitive_columns=["income"],
-    #     description="UCI Adult -- mixed categorical/continuous",
-    #     relevant_thresholds=["T1", "T2", "T4"],
-    # ),
+    DatasetSpec(
+        name="testdata",
+        path=DATA_DIR / "testdata.csv",
+        quasi_identifiers=["roof", "walls", "water", "electcon",
+                           "relat", "sex", "urbrur"],
+        sensitive_columns=["income"],
+        description="sdcMicro testdata -- categorical-heavy (7 cat QIs), 4580 rows",
+        relevant_thresholds=["T1", "T2", "T4"],
+    ),
+    DatasetSpec(
+        name="CASCrefmicrodata",
+        path=DATA_DIR / "CASCrefmicrodata.csv",
+        quasi_identifiers=["AGI", "FEDTAX", "PTOTVAL", "PEARNVAL", "ERNVAL"],
+        sensitive_columns=[],
+        description="sdcMicro CASC -- all continuous financial vars, 1080 rows",
+        relevant_thresholds=["T1", "T3"],
+    ),
+    DatasetSpec(
+        name="free1",
+        path=DATA_DIR / "free1.csv",
+        quasi_identifiers=["REGION", "SEX", "AGE", "MARSTAT", "ETNI",
+                           "EDUC1", "EDUC2"],
+        sensitive_columns=["INCOME"],
+        description="sdcMicro free1 -- mixed cat/cont (5 cat + 2 cont QIs), 4000 rows",
+        relevant_thresholds=["T1", "T2", "T3", "T4"],
+    ),
 ]
