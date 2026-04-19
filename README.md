@@ -184,7 +184,6 @@ Full specification: [Smart Rules Reference](docs/smart_rules_complete.md)
 | [Smart Rules Reference](docs/smart_rules_complete.md) | Complete rule specification across all 5 pipeline phases |
 | [Pipeline Architecture](docs/sdc_pipeline_architecture.md) | System architecture, data flow, component interactions |
 | [Empirical Validation](docs/empirical_validation_checklist.md) | Heuristic thresholds and validation checklist |
-| [Build Guide](docs/build_guide.md) | Packaging for standalone distribution |
 
 ## What's New (feat/port-v2-methods)
 
