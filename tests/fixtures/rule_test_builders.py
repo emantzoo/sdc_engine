@@ -286,6 +286,110 @@ def build_extreme_uniqueness_dataset() -> Tuple[pd.DataFrame, List[str], List[st
 
 
 # ════════════════════════════════════════════════════════════════════════
+# Context-aware rules: PUB1, SEC1, REG1
+# ════════════════════════════════════════════════════════════════════════
+
+def build_pub1_high_risk_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """Triggers PUB1_Public_Release_High_Risk under PUBLIC tier.
+    Verified: reid_95=0.333, cat_ratio=0.33.
+
+    Needs: access_tier='PUBLIC', reid_target_raw=0.01, reid_95 > 0.20.
+    Uses qr2_moderate_tail shape (reid_95=0.333 > 0.20 threshold).
+    """
+    rng = _rng()
+    n = 300
+    df = pd.DataFrame({
+        'region': rng.choice([f'r_{i}' for i in range(5)], n),
+        'age': rng.choice([20, 40, 60], n),
+        'score': rng.choice([1, 3, 5, 7], n),
+    })
+    return df, ['region', 'age', 'score'], []
+
+
+def build_pub1_moderate_risk_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """Triggers PUB1_Public_Release_Moderate_Risk under PUBLIC tier.
+    Verified: reid_95 in (0.05, 0.20].
+
+    Uses low1 shape (cat_ratio=1.00, low risk) but with fewer rows → moderate reid.
+    """
+    rng = _rng()
+    n = 500
+    df = pd.DataFrame({
+        'sex': rng.choice(['M', 'F'], n),
+        'region': rng.choice(['N', 'S', 'E', 'W', 'NE'], n),
+        'age_band': rng.choice(['20-30', '30-40', '40-50', '50-60'], n),
+    })
+    return df, ['sex', 'region', 'age_band'], []
+
+
+def build_sec1_categorical_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """Triggers SEC1_Secure_Categorical under SECURE tier.
+    Verified: cat_ratio >= 0.60, reid_95 in [0.05, 0.25].
+
+    Needs: access_tier='SECURE', utility_floor >= 0.90, reid_95 in [0.05, 0.25].
+    Reuses cat1 builder's shape (all categorical, reid_95 ~0.20).
+    """
+    rng = _rng()
+    n = 600
+    df = pd.DataFrame({
+        'region': rng.choice(['N', 'S', 'E', 'W'], n, p=[0.3, 0.25, 0.25, 0.2]),
+        'edu': rng.choice(['hs', 'ba', 'ms', 'phd'], n, p=[0.35, 0.35, 0.2, 0.1]),
+        'marital': rng.choice(['single', 'married', 'div'], n, p=[0.4, 0.4, 0.2]),
+    })
+    return df, ['region', 'edu', 'marital'], []
+
+
+def build_sec1_continuous_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """Triggers SEC1_Secure_Continuous under SECURE tier.
+    Verified: cat_ratio < 0.60, n_continuous > 0, reid_95 in [0.05, 0.25].
+
+    Uses low2 shape but with fewer rows to push reid_95 into range.
+    """
+    rng = _rng()
+    n = 500
+    df = pd.DataFrame({
+        'sex': rng.choice(['M', 'F'], n),
+        'age_group': rng.choice([20, 40, 60], n),
+        'income_level': rng.choice([30, 50, 70], n),
+        'score': rng.choice([1, 3, 5, 7], n),
+    })
+    return df, ['sex', 'age_group', 'income_level', 'score'], []
+
+
+def build_reg1_high_risk_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """Triggers REG1_Regulatory_High_Risk under PUBLIC tier with target=0.03.
+    Verified: reid_95 > 0.15.
+
+    Reuses cat1 builder's shape (reid_95 ~0.20).
+    """
+    rng = _rng()
+    n = 600
+    df = pd.DataFrame({
+        'region': rng.choice(['N', 'S', 'E', 'W'], n, p=[0.3, 0.25, 0.25, 0.2]),
+        'edu': rng.choice(['hs', 'ba', 'ms', 'phd'], n, p=[0.35, 0.35, 0.2, 0.1]),
+        'marital': rng.choice(['single', 'married', 'div'], n, p=[0.4, 0.4, 0.2]),
+    })
+    return df, ['region', 'edu', 'marital'], []
+
+
+def build_reg1_moderate_risk_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """Triggers REG1_Regulatory_Moderate_Risk under PUBLIC tier with target=0.03.
+    Verified: reid_95 in (0.03, 0.15].
+
+    Needs moderate reid_95 so MED1/QR rules don't preempt — but REG1
+    fires FIRST in the chain, so it preempts everything.
+    """
+    rng = _rng()
+    n = 500
+    df = pd.DataFrame({
+        'sex': rng.choice(['M', 'F'], n),
+        'region': rng.choice(['N', 'S', 'E', 'W', 'NE'], n),
+        'age_band': rng.choice(['20-30', '30-40', '40-50', '50-60'], n),
+    })
+    return df, ['sex', 'region', 'age_band'], []
+
+
+# ════════════════════════════════════════════════════════════════════════
 # Edge cases
 # ════════════════════════════════════════════════════════════════════════
 

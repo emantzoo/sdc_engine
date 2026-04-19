@@ -1199,6 +1199,10 @@ def run_rules_engine_protection(
     # Inject qi_treatment so rules can apply treatment balance
     data_features['qi_treatment'] = qi_treatment or {}
 
+    # Inject context targets so context-aware rules (PUB1/SEC1/REG1) can read them
+    data_features['_reid_target_raw'] = reid_target
+    data_features['_utility_floor'] = utility_floor
+
     suite = select_method_suite(
         features=data_features,
         access_tier=access_tier,

@@ -487,6 +487,28 @@ Gate: `reid_95 > 0.15` (lowered from 0.20 to allow RC4 which fires at 15%). RC1�
 | RC3 | 3+ HIGH QIs (spread high) | kANON | k=7–10, generalisation |
 | RC4 | 1 HIGH + 3+ others (bottleneck) | GENERALIZE bottleneck → kANON k=3 |
 
+#### Context-Aware Rules (Access Tier Gated)
+
+These rules fire based on the access tier of the release context, overriding
+the generic rule chain when the tier's target/utility constraints favor a
+specific approach.
+
+| Rule | Tier | Condition | Method | Params |
+|------|------|-----------|--------|--------|
+| REG1 high | PUBLIC (target=3%) | reid_95 > 15% | kANON hybrid | k=7 |
+| REG1 moderate | PUBLIC (target=3%) | 3% < reid_95 ≤ 15% | kANON hybrid | k=5 |
+| PUB1 high | PUBLIC (target=1%) | reid_95 > 20% | kANON generalization | k=10 |
+| PUB1 moderate | PUBLIC (target=1%) | 5% < reid_95 ≤ 20% | kANON hybrid | k=7 |
+| SEC1 categorical | SECURE | 5% < reid_95 ≤ 25%, cat ≥ 60% | PRAM | p=0.10–0.225 |
+| SEC1 continuous | SECURE | 5% < reid_95 ≤ 25%, continuous present | NOISE | mag=0.05–0.175 |
+
+**Priority**: REG1 fires first (before all data-driven rules), PUB1 and SEC1 fire before CAT rules.
+
+**Discrimination**: PUB1 and REG1 both check `access_tier == 'PUBLIC'`. They are
+distinguished by `_reid_target_raw`: public_release uses 0.01, regulatory_compliance
+uses 0.03 (float comparison with 1e-6 tolerance). SEC1 only fires when
+`_utility_floor >= 0.90`.
+
 #### Categorical-Aware Rules (CAT)
 
 | Rule | Condition | Method | Params |
@@ -857,6 +879,6 @@ The Configure tab supports a Generate Plan → Review → Apply workflow:
 | `sdc/llm_assistant.py` | Cerebras API wrapper (ai_sdc_manly only) |
 | `sdc/llm_classify.py` | LLM column classification (ai_sdc_manly only) |
 | `sdc/llm_method_config.py` | LLM method selection + review mode (ai_sdc_manly only) |
-| `tests/test_rule_selection_known_cases.py` | 24 known-case regression tests for rule selection |
-| `tests/fixtures/rule_test_builders.py` | Deterministic dataset builders for rule testing |
+| `tests/test_rule_selection_known_cases.py` | 39 known-case regression tests for rule selection (incl. PUB1/SEC1/REG1) |
+| `tests/fixtures/rule_test_builders.py` | Deterministic dataset builders for rule testing (22 builders) |
 | `tests/empirical/` | Empirical threshold validation harness (8 datasets, 4 thresholds) |

@@ -15,6 +15,10 @@ Threshold Examples by Access Type:
 
 RULE PRIORITY (evaluated in order, first match wins):
 =====================================================
+0a. REG1 - Regulatory compliance (PUBLIC + reid_target=3%)
+    - REG1_high: reid_95 > 15% → kANON k=7 hybrid
+    - REG1_moderate: 3% < reid_95 ≤ 15% → kANON k=5 hybrid
+
 1.  Data Structure Rules - Tabular format detection
     - App is microdata-only; tabular data falls through to microdata rules
 
@@ -28,6 +32,14 @@ RULE PRIORITY (evaluated in order, first match wins):
     - RC2: concentrated (top 2 ≥60%) → kANON k=5 hybrid
     - RC3: spread_high (3+ HIGH QIs) → kANON k=7-10 generalization
     - RC4: single HIGH + 3+ LOW QIs → GENERALIZE(bottleneck) → kANON k=3
+
+2b. PUB1 - Public release structural preference (PUBLIC + reid_target=1%)
+    - PUB1_high: reid_95 > 20% → kANON k=10 generalization
+    - PUB1_moderate: 5% < reid_95 ≤ 20% → kANON k=7 hybrid
+
+2c. SEC1 - Secure environment utility priority (SECURE + utility_floor ≥ 90%)
+    - SEC1_cat: 5% < reid_95 ≤ 25%, cat ≥ 60% → PRAM p=0.10-0.225
+    - SEC1_cont: 5% < reid_95 ≤ 25%, continuous present → NOISE mag=0.05-0.175
 
 3.  Categorical-Aware Rules (CAT1-CAT2) - PRAM for categorical data at moderate risk
     - CAT1: ≥70% categorical + ReID95 15-40% + no near-constant QIs → PRAM
@@ -1245,6 +1257,233 @@ def temporal_dominant_rules(features: Dict) -> Dict:
     }
 
 
+def regulatory_compliance_rules(features: Dict) -> Dict:
+    """REG1: Regulatory compliance — reid_95 ≤ 3%, utility_floor 88%.
+
+    Distinguished from public_release (reid_95 ≤ 1%) by the target value.
+    Fires FIRST in the chain after pipeline rules.
+    """
+    if features.get('data_type') != 'microdata':
+        return {'applies': False}
+
+    access_tier = features.get('_access_tier', 'SCIENTIFIC')
+    reid_target = features.get('_reid_target_raw')
+
+    # REG1 fires only when target is 0.03 (regulatory_compliance context)
+    if access_tier != 'PUBLIC' or reid_target is None:
+        return {'applies': False}
+    if abs(reid_target - 0.03) > 1e-6:
+        return {'applies': False}
+
+    reid_95 = features.get('reid_95', 0)
+    if reid_95 <= 0.03:
+        return {'applies': False}  # Already meets target
+
+    qis = features.get('quasi_identifiers', [])
+
+    if reid_95 > 0.15:
+        return {
+            'applies': True,
+            'rule': 'REG1_Regulatory_High_Risk',
+            'method': 'kANON',
+            'parameters': {
+                'quasi_identifiers': qis, 'k': 7, 'strategy': 'hybrid',
+            },
+            'reason': (
+                f"Regulatory compliance (ReID95={reid_95:.1%}, target=3%) — "
+                f"hybrid kANON k=7 with suppression gating"
+            ),
+            'confidence': 'HIGH',
+            'priority': 'REQUIRED',
+            'reid_fallback': {
+                'method': 'kANON',
+                'parameters': {'quasi_identifiers': qis, 'k': 10, 'strategy': 'generalization'},
+            },
+            'utility_fallback': {
+                'method': 'LOCSUPR',
+                'parameters': {'quasi_identifiers': qis, 'k': 5},
+            },
+        }
+
+    return {
+        'applies': True,
+        'rule': 'REG1_Regulatory_Moderate_Risk',
+        'method': 'kANON',
+        'parameters': {
+            'quasi_identifiers': qis, 'k': 5, 'strategy': 'hybrid',
+        },
+        'reason': (
+            f"Regulatory compliance (ReID95={reid_95:.1%}, target=3%) — "
+            f"hybrid kANON k=5"
+        ),
+        'confidence': 'HIGH',
+        'priority': 'REQUIRED',
+        'reid_fallback': {
+            'method': 'kANON',
+            'parameters': {'quasi_identifiers': qis, 'k': 7, 'strategy': 'hybrid'},
+        },
+        'utility_fallback': {
+            'method': 'LOCSUPR',
+            'parameters': {'quasi_identifiers': qis, 'k': 5},
+        },
+    }
+
+
+def public_release_rules(features: Dict) -> Dict:
+    """PUB1: In PUBLIC access tier, prefer structural methods even at moderate ReID.
+
+    PUBLIC tier targets reid_95 ≤ 1%, which PRAM/NOISE cannot achieve reliably.
+    Routes to kANON before CAT1/LOW rules can pick a perturbation method.
+
+    Rule priority: fires BEFORE categorical_aware_rules.
+    """
+    if features.get('data_type') != 'microdata':
+        return {'applies': False}
+
+    access_tier = features.get('_access_tier', 'SCIENTIFIC')
+    if access_tier != 'PUBLIC':
+        return {'applies': False}
+
+    # Distinguish regulatory_compliance (handled by REG1) from public_release
+    # regulatory_compliance uses reid_target 0.03, public_release uses 0.01
+    reid_target = features.get('_reid_target_raw')
+    if reid_target is not None and abs(reid_target - 0.03) < 1e-6:
+        return {'applies': False}  # REG1 handles this
+
+    reid_95 = features.get('reid_95', 0)
+    qis = features.get('quasi_identifiers', [])
+
+    if reid_95 <= 0.05:
+        return {'applies': False}  # Low risk — LOW rules are fine
+
+    if reid_95 > 0.20:
+        return {
+            'applies': True,
+            'rule': 'PUB1_Public_Release_High_Risk',
+            'method': 'kANON',
+            'parameters': {
+                'quasi_identifiers': qis, 'k': 10,
+                'strategy': 'generalization',
+            },
+            'reason': (
+                f"PUBLIC release with ReID95={reid_95:.1%} — structural "
+                f"protection required (PRAM/NOISE cannot meet reid_95 ≤ 1% target)"
+            ),
+            'confidence': 'HIGH',
+            'priority': 'REQUIRED',
+            'reid_fallback': {
+                'method': 'LOCSUPR',
+                'parameters': {'quasi_identifiers': qis, 'k': 7},
+            },
+            'utility_fallback': {
+                'method': 'kANON',
+                'parameters': {'quasi_identifiers': qis, 'k': 5, 'strategy': 'hybrid'},
+            },
+        }
+
+    # 0.05 < reid_95 <= 0.20
+    return {
+        'applies': True,
+        'rule': 'PUB1_Public_Release_Moderate_Risk',
+        'method': 'kANON',
+        'parameters': {
+            'quasi_identifiers': qis, 'k': 7, 'strategy': 'hybrid',
+        },
+        'reason': (
+            f"PUBLIC release with ReID95={reid_95:.1%} — hybrid kANON "
+            f"balances structural protection and utility"
+        ),
+        'confidence': 'HIGH',
+        'priority': 'REQUIRED',
+        'reid_fallback': {
+            'method': 'kANON',
+            'parameters': {'quasi_identifiers': qis, 'k': 10, 'strategy': 'generalization'},
+        },
+        'utility_fallback': {
+            'method': 'LOCSUPR',
+            'parameters': {'quasi_identifiers': qis, 'k': 5},
+        },
+    }
+
+
+def secure_environment_rules(features: Dict) -> Dict:
+    """SEC1: In SECURE access tier with moderate ReID, prefer perturbation.
+
+    SECURE tier allows reid_95 ≤ 10% and requires utility ≥ 92%. Structural
+    methods are often wasteful here — perturbation can meet target with
+    significantly better utility.
+
+    Rule priority: fires BEFORE reid_risk_rules (QR0-QR4).
+    """
+    if features.get('data_type') != 'microdata':
+        return {'applies': False}
+
+    access_tier = features.get('_access_tier', 'SCIENTIFIC')
+    if access_tier != 'SECURE':
+        return {'applies': False}
+
+    reid_95 = features.get('reid_95', 0)
+    if reid_95 > 0.25 or reid_95 < 0.05:
+        # Above 0.25: even SECURE needs structural; below 0.05: LOW rules handle it
+        return {'applies': False}
+
+    utility_floor = features.get('_utility_floor', 0.80)
+    if utility_floor < 0.90:
+        return {'applies': False}  # Only fire when utility is really a priority
+
+    qis = features.get('quasi_identifiers', [])
+    n_cat = features.get('n_categorical', 0)
+    n_cont = features.get('n_continuous', 0)
+    total = n_cat + n_cont
+    if total == 0:
+        return {'applies': False}
+    cat_ratio = n_cat / total
+
+    if cat_ratio >= 0.60:
+        p_change = round(min(0.225, 0.10 + reid_95 * 0.5), 2)
+        pram_vars = top_categorical_qis(features) or qis[:5]
+        return {
+            'applies': True,
+            'rule': 'SEC1_Secure_Categorical',
+            'method': 'PRAM',
+            'parameters': {'variables': pram_vars, 'p_change': p_change},
+            'reason': (
+                f"SECURE tier with ReID95={reid_95:.1%}, {cat_ratio:.0%} "
+                f"categorical — PRAM preserves utility within risk budget"
+            ),
+            'confidence': 'MEDIUM',
+            'priority': 'RECOMMENDED',
+            'reid_fallback': {
+                'method': 'kANON',
+                'parameters': {'quasi_identifiers': qis, 'k': 3, 'strategy': 'hybrid'},
+            },
+            'utility_fallback': None,
+        }
+
+    if n_cont > 0 and cat_ratio < 0.60:
+        magnitude = round(min(0.175, 0.05 + reid_95 * 0.5), 2)
+        cont_vars = features.get('continuous_vars', [])
+        return {
+            'applies': True,
+            'rule': 'SEC1_Secure_Continuous',
+            'method': 'NOISE',
+            'parameters': {'variables': cont_vars, 'magnitude': magnitude},
+            'reason': (
+                f"SECURE tier with ReID95={reid_95:.1%}, continuous-dominant — "
+                f"NOISE preserves distribution within risk budget"
+            ),
+            'confidence': 'MEDIUM',
+            'priority': 'RECOMMENDED',
+            'reid_fallback': {
+                'method': 'kANON',
+                'parameters': {'quasi_identifiers': qis, 'k': 3, 'strategy': 'hybrid'},
+            },
+            'utility_fallback': None,
+        }
+
+    return {'applies': False}
+
+
 def default_rules(features: Dict) -> Dict:
     """
     Default fallback rules.
@@ -1345,10 +1584,13 @@ def select_method_by_features(
     # 8.  Default Rules - Final fallbacks
     # Note: Pipeline escalation is handled reactively by smart_protect() if needed
     rule_factories = [
+        regulatory_compliance_rules,   # REG1 — first (PUBLIC + target=3%)
         data_structure_rules,
         small_dataset_rules,
         structural_risk_rules,
         risk_concentration_rules,
+        public_release_rules,          # PUB1 — before CAT (PUBLIC + target=1%)
+        secure_environment_rules,      # SEC1 — before CAT (SECURE tier)
         categorical_aware_rules,
         l_diversity_rules,
         temporal_dominant_rules,
