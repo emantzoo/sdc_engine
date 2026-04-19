@@ -1,0 +1,6 @@
+sdcMicro version: [1] 5 8 1
+
+testdata: 4580 rows
+CASCrefmicrodata: 1080 rows
+francdat: 8 rows
+free1: 4000 rows
