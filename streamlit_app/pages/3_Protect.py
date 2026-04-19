@@ -719,11 +719,11 @@ if plan_df is not None and len(plan_df) > 0:
                         if sc_method == "kANON":
                             sc_params = {"k": st.number_input("k", 2, 50, 5, key="_sc_k")}
                         elif sc_method == "LOCSUPR":
-                            sc_params = {"threshold": st.number_input("Threshold", 1, 50, 3, key="_sc_t")}
+                            sc_params = {"k": st.number_input("Threshold", 1, 50, 3, key="_sc_t")}
                         elif sc_method == "PRAM":
                             sc_params = {"p_change": st.slider("p_change", 0.01, 0.50, 0.10, 0.01, key="_sc_p")}
                         elif sc_method == "NOISE":
-                            sc_params = {"noise": st.slider("Noise", 0.01, 0.50, 0.10, 0.01, key="_sc_n")}
+                            sc_params = {"magnitude": st.slider("Noise", 0.01, 0.50, 0.10, 0.01, key="_sc_n")}
                         elif sc_method == "RANKSWAP":
                             sc_params = {"p": st.number_input("Rank distance (p)", 1, 100, 10, key="_sc_rsp"),
                                          "R0": st.slider("R0", 0.50, 1.00, 0.95, 0.01, key="_sc_rsr0")}
@@ -1095,19 +1095,19 @@ elif protect_mode == "Manual":
         k_val = st.number_input("k value", min_value=2, max_value=50, value=int(default_k))
         st.session_state["_manual_params"] = {"k": k_val}
     elif manual_method == "LOCSUPR":
-        default_t = auto_params.get("threshold", 3)
+        default_t = auto_params.get("k", 3)
         threshold = st.number_input(
             "Suppression threshold", min_value=1, max_value=50, value=int(default_t)
         )
-        st.session_state["_manual_params"] = {"threshold": threshold}
+        st.session_state["_manual_params"] = {"k": threshold}
     elif manual_method == "PRAM":
         default_p = auto_params.get("p_change", 0.10)
         p_change = st.slider("p_change", 0.01, 0.50, float(default_p), 0.01)
         st.session_state["_manual_params"] = {"p_change": p_change}
     elif manual_method == "NOISE":
-        default_n = auto_params.get("noise", 0.10)
+        default_n = auto_params.get("magnitude", 0.10)
         noise_level = st.slider("Noise level", 0.01, 0.50, float(default_n), 0.01)
-        st.session_state["_manual_params"] = {"noise": noise_level}
+        st.session_state["_manual_params"] = {"magnitude": noise_level}
     elif manual_method == "RANKSWAP":
         p_val = st.number_input("Rank distance (p)", min_value=1, max_value=100, value=10)
         r0_val = st.slider("Correlation preservation (R0)", 0.50, 1.00, 0.95, 0.01)

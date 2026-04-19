@@ -189,7 +189,7 @@ class SDCProtection:
             # ── QI over-suppression check ──────────────────────────────
             # If a structural method (kANON/LOCSUPR) suppressed >40% of
             # any QI column, flag the result so callers can try a fallback.
-            if method.upper() in ('KANON', 'LOCSUPR', 'KANON') and quasi_identifiers:
+            if method.upper() in ('KANON', 'LOCSUPR') and quasi_identifiers:
                 _qi_supp = {}
                 for qi in quasi_identifiers:
                     if qi in df.columns and qi in result.protected_data.columns:
@@ -421,13 +421,14 @@ class SDCProtection:
             if t_target is not None:
                 kwargs.setdefault('t_target', t_target)
 
-            elif upper == 'LOCSUPR':
-                # Only inject if user hasn't already set importance_weights
-                if 'importance_weights' not in kwargs:
-                    weights = build_locsupr_weights(
-                        quasi_identifiers, qi_treatment)
-                    if weights:
-                        kwargs['importance_weights'] = weights
+        elif upper == 'LOCSUPR':
+            # Only inject if user hasn't already set importance_weights
+            if qi_treatment and 'importance_weights' not in kwargs:
+                from sdc_engine.sdc.qi_treatment import build_locsupr_weights
+                weights = build_locsupr_weights(
+                    quasi_identifiers, qi_treatment)
+                if weights:
+                    kwargs['importance_weights'] = weights
 
         # Pass use_r preference to methods that support R/sdcMicro backend
         if upper in ('NOISE', 'LOCSUPR'):

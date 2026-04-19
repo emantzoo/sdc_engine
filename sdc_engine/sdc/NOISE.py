@@ -75,7 +75,7 @@ def _check_r_available():
         try:
             ro.r('library(sdcMicro)')
             _R_AVAILABLE = True
-        except:
+        except Exception:
             _R_AVAILABLE = False
     except ImportError:
         _R_AVAILABLE = False

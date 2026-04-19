@@ -170,3 +170,6 @@ output/sdc_output/*.txt
 
 # Local test data (not tracked — use for local testing)
 data/
+
+# Build guide (not needed)
+docs/build_guide.md
