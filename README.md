@@ -28,6 +28,49 @@ The workflow follows five phases:
 - **Timestamp Utilities** -- grain-aware date generalization (minute/hour/date/week/month/quarter/year)
 - **sdcMicro Toggle** -- optional R/sdcMicro backend for LOCSUPR and NOISE (sidebar toggle shows availability)
 
+## Relationship to sdcMicro
+
+This engine uses the [sdcMicro](https://CRAN.R-project.org/package=sdcMicro)
+R package as an optional backend for two methods:
+
+- **LOCSUPR** calls `sdcMicro::localSuppression()` via rpy2 when available,
+  producing ~61% fewer suppressions than the Python fallback.
+- **NOISE** calls `sdcMicro::addNoise(method='correlated')` which preserves
+  covariance structure -- ~67% less distortion than independent noise.
+
+When R is not installed, pure-Python implementations run as fallbacks.
+
+### What's novel in this engine
+
+Beyond wrapping sdcMicro, the following are original contributions:
+
+- **Rules-engine method selection** (`selection/rules.py` + `selection/pipelines.py`):
+  30+ named rules across 8 priority tiers with first-match-wins evaluation
+- **Suppression-gated rule switching**: rules estimate suppression before
+  committing to kANON and switch to LOCSUPR/PRAM when kANON would
+  over-suppress
+- **Risk concentration routing (RC1--RC4)**: per-QI backward elimination
+  to route based on which column drives risk
+- **Retry engine with escalation + cross-method starts**
+  (`protection_engine.py`): parameter escalation, intelligent cross-method
+  starting points, QI over-suppression guards, ReID plateau detection
+- **Perturbative Challenge**: post-success check that tries PRAM after
+  structural methods to potentially improve utility at zero privacy cost
+- **Type-aware preprocessing** (`sdc_preprocessing.py`): per-column action
+  routing (binning/truncation/coarsening) before protection
+- **Streamlit workflow UI**: upload -> configure -> protect -> download
+
+### Citations
+
+- Templ, M., Kowarik, A., Meindl, B. (2015). *Statistical Disclosure
+  Control for Micro-Data Using the R Package sdcMicro*. Journal of
+  Statistical Software, 67(4). https://doi.org/10.18637/jss.v067.i04
+- Hundepool, A., Domingo-Ferrer, J., Franconi, L. et al. (2012).
+  *Statistical Disclosure Control*. Wiley.
+
+If you use this engine in published research, please cite the sdcMicro
+JSS paper alongside this repository.
+
 ## Protection Methods
 
 | Method | Type | Best For | Zero Suppression |

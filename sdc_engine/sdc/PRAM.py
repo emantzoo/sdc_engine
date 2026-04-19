@@ -30,6 +30,20 @@ Output:
 - If return_metadata=False: DataFrame with randomized values
 - If return_metadata=True: (DataFrame, metadata_dict)
 
+References:
+-----------
+- Kooiman, P., Willenborg, L., Gouweleeuw, J. (1997). PRAM: A Method
+  for Disclosure Limitation of Microdata. Statistics Netherlands
+  Research Paper 9705.
+- Templ, M., Kowarik, A., Meindl, B. (2015). Statistical Disclosure
+  Control for Micro-Data Using the R Package sdcMicro. Journal of
+  Statistical Software, 67(4), 1-36.
+
+This implementation uses invariant PRAM (preserves marginal distributions
+on average) by default, following the formulation in Kooiman et al. (1997).
+The invariant transition matrix is computed as described in Section 3 of
+the JSS paper.
+
 Author: SDC Methods Implementation
 Date: December 2025
 """
