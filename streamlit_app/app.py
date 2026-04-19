@@ -44,22 +44,33 @@ with st.sidebar:
 
     # sdcMicro (R) toggle
     try:
-        from sdc_engine.sdc.LOCSUPR import _check_r_available
+        from sdc_engine.sdc.r_backend import _check_r_available, reset_r_check
         r_available = _check_r_available()
     except Exception:
         r_available = False
 
     r_label = "Use sdcMicro (R)  —  " + (":green[available]" if r_available else ":red[not found]")
-    st.toggle(
-        r_label,
-        value=st.session_state.get("use_sdcmicro_r", True),
-        key="use_sdcmicro_r",
-        disabled=not r_available,
-        help=(
-            "When enabled, LOCSUPR and NOISE use R/sdcMicro for higher-quality results "
-            "(fewer suppressions, less distortion). Falls back to Python if R fails."
-        ),
-    )
+    col_toggle, col_btn = st.columns([3, 1])
+    with col_toggle:
+        st.toggle(
+            r_label,
+            value=st.session_state.get("use_sdcmicro_r", True),
+            key="use_sdcmicro_r",
+            disabled=not r_available,
+            help=(
+                "When enabled, LOCSUPR and NOISE use R/sdcMicro for higher-quality results "
+                "(fewer suppressions, less distortion). Falls back to Python if R fails."
+            ),
+        )
+    with col_btn:
+        if st.button("Re-check R", help="Re-probe R/sdcMicro availability (e.g. after installing)"):
+            try:
+                reset_r_check()
+                refreshed = _check_r_available(force=True)
+                st.toast(f"R/sdcMicro: {'available' if refreshed else 'not found'}")
+            except Exception:
+                st.toast("R check failed")
+            st.rerun()
 
 # ── Navigation ────────────────────────────────────────────────────────
 upload_page = st.Page("pages/1_Upload.py", title="Upload", icon="\U0001f4c2")

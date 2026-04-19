@@ -28,6 +28,24 @@ Input:
 Output:
 - k-anonymous DataFrame where all QI combinations appear at least k times
 
+References:
+-----------
+- Samarati, P. (2001). Protecting respondents' identities in microdata
+  release. IEEE Transactions on Knowledge and Data Engineering, 13(6),
+  1010-1027.
+- Sweeney, L. (2002). k-Anonymity: A Model for Protecting Privacy.
+  International Journal of Uncertainty, Fuzziness and Knowledge-Based
+  Systems, 10(5), 557-570.
+- Templ, M., Kowarik, A., Meindl, B. (2015). Statistical Disclosure
+  Control for Micro-Data Using the R Package sdcMicro. Journal of
+  Statistical Software, 67(4), 1-36.
+
+This implementation follows Samarati (2001) and Sweeney (2002) for the
+core k-anonymity definition, with the generalization + suppression
+hybrid strategy inspired by sdcMicro's approach (Templ et al. 2015).
+The beam-search and recursive local recoding strategies are novel
+extensions developed for this engine.
+
 Author: SDC Methods Implementation
 Date: December 2025
 """
