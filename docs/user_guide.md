@@ -370,7 +370,7 @@ If you see suppression warnings, consider:
 ---
 ## 7. Available Protection Methods
 
-The application provides four microdata protection methods. Tabular methods are not supported — the tool works exclusively with individual-level records.
+The application provides six microdata protection methods. Tabular methods are not supported — the tool works exclusively with individual-level records.
 
 #### kANON — k-Anonymity
 
@@ -458,6 +458,40 @@ This preserves significantly more analytical value: partial suppression (1 QI pe
 **Best for:** Continuous numeric data (income, measurements, amounts) where statistical distributions matter more than exact values.
 
 > **Supports attribute disclosure toggle** — can also perturb sensitive columns at lighter strength.
+
+---
+
+#### RANKSWAP — Rank Swapping
+
+**Simple:** Swaps numeric values between records that are close in rank order. If two people have similar incomes (close ranks), their values might be exchanged. The overall distribution and rank correlations are preserved, but individual values are displaced.
+
+**How it works:** For each numeric variable, records are sorted by rank. Each value is swapped with another value within a rank distance of p positions. An optional correlation preservation threshold (R0) ensures inter-variable correlations remain above a minimum level.
+
+| Parameter | Default | Range | Effect |
+|-----------|---------|-------|--------|
+| p | 10 | 1–100 | Maximum rank distance for swapping (higher = more privacy, less correlation preservation) |
+| R0 | 0.95 | 0.50–1.00 | Minimum correlation preservation threshold (correlation check between original and swapped) |
+| top_percent | 1.0 | 0–5.0 | Percentage of top values to protect with larger swaps |
+| bottom_percent | 1.0 | 0–5.0 | Percentage of bottom values to protect with larger swaps |
+
+**Best for:** Numeric-dominant data where correlation structure matters (e.g., income vs age, height vs weight). Zero suppression — all records preserved.
+
+---
+
+#### RECSWAP — Record Swapping
+
+**Simple:** Swaps values between records that are similar on matching variables. Two people in the same region and age group might have their occupation values exchanged. Group-level statistics are preserved because swaps happen within similar groups.
+
+**How it works:** Identifies pairs of similar records (based on match_variables or all QIs), then swaps a fraction of their values. Optional stratification ensures swaps happen within defined subgroups. A targeted mode can focus swaps on the highest-risk variable.
+
+| Parameter | Default | Range | Effect |
+|-----------|---------|-------|--------|
+| swap_rate | 0.05 | 0.01–0.50 | Fraction of records to swap (5% default) |
+| match_variables | None | list of columns | Variables to match on when finding swap partners (None = use all QIs) |
+| within_strata | None | column name | Stratification variable — swaps only within strata |
+| targeted | False | True/False | If True, swaps only the highest-risk variable |
+
+**Best for:** Categorical or mixed data at low-moderate risk where group-level statistics (cross-tabulations, marginals) must be preserved. Zero suppression.
 
 ---
 

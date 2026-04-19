@@ -629,6 +629,20 @@ flowchart TD
 - Distribution preservation check (noise_std vs column_std ratio)
 - Pairwise correlation preservation estimate
 
+**RANKSWAP config details:**
+- Rank distance p from risk level (low risk: p=5, moderate: p=10, high: p=20)
+- Correlation preservation threshold R0 (default 0.95)
+- Top/bottom percent for outlier protection (default 1%)
+- Per-variable p override via per_variable_p dict
+- Zero suppression — all records preserved
+
+**RECSWAP config details:**
+- Swap rate from risk level (low risk: 0.03, moderate: 0.05, high: 0.10)
+- Match variables default to all QIs unless user specifies a subset
+- Within-strata restricts swaps to geographic/demographic subgroups
+- Targeted mode swaps only the highest-risk variable
+- Zero suppression — all records preserved
+
 ### Retry Engine (`run_rules_engine_protection()`)
 
 ```mermaid
@@ -673,10 +687,12 @@ flowchart TD
 
 | Primary | Fallbacks |
 |---|---|
-| kANON | LOCSUPR → PRAM → NOISE |
-| PRAM | kANON → LOCSUPR → NOISE |
-| NOISE | kANON → PRAM → LOCSUPR |
-| LOCSUPR | kANON → PRAM → NOISE |
+| kANON | LOCSUPR → PRAM → NOISE → RANKSWAP |
+| PRAM | kANON → LOCSUPR → NOISE → RECSWAP |
+| NOISE | RANKSWAP → kANON → PRAM → LOCSUPR |
+| LOCSUPR | kANON → PRAM → NOISE → RECSWAP |
+| RANKSWAP | NOISE → kANON → PRAM → LOCSUPR |
+| RECSWAP | PRAM → RANKSWAP → kANON → LOCSUPR |
 
 **Cross-method starting points (bidirectional):**
 
@@ -813,7 +829,7 @@ Users can constrain method selection via the Configure tab's advanced settings:
 
 **Exclude methods:** CheckBoxGroup — PRAM, NOISE can be excluded. kANON, LOCSUPR, and suppression are never excludable (safety floor).
 
-**Method preference:** Auto (default), Prefer structural (bias toward kANON/LOCSUPR), Prefer perturbative (bias toward PRAM/NOISE — only effective when ReID ≤ 5%).
+**Method preference:** Auto (default), Prefer structural (bias toward kANON/LOCSUPR), Prefer perturbative (bias toward PRAM/NOISE/RANKSWAP/RECSWAP — only effective when ReID ≤ 5%).
 
 **Warning banners:** shown when user excludes a method the rule chain would have selected, or when perturbative preference is set but ReID > 5%.
 

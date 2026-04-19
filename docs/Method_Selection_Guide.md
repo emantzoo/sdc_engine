@@ -6,7 +6,7 @@ This guide covers ReID-based method selection, the reactive pipeline escalation 
 
 The SDC Methods library uses a multi-rule system to automatically select the best protection method based on data characteristics and risk distribution patterns. The rules engine is integrated into the Configure view, providing automatic method recommendations after ReID calculation.
 
-**Key Insight**: kANON is selected for most microdata cases because it's the most versatile structural method that reduces ReID. LOCSUPR is preferred for severe tail risk (targeted suppression) and benefits from SDC Engine-derived importance weights. Perturbation methods (PRAM, NOISE) are used when ReID is already low and statistical utility is the priority.
+**Key Insight**: kANON is selected for most microdata cases because it's the most versatile structural method that reduces ReID. LOCSUPR is preferred for severe tail risk (targeted suppression) and benefits from SDC Engine-derived importance weights. Perturbation methods (PRAM, NOISE, RANKSWAP, RECSWAP) are used when ReID is already low and statistical utility is the priority. RANKSWAP preserves rank correlations for numeric data; RECSWAP preserves marginal distributions for mixed/categorical data.
 
 ## The Central Role of ReID
 
@@ -142,9 +142,9 @@ When no specific goal is provided, the system uses **ReID (Re-identification Ris
 | `moderate` | Moderate overall risk | kANON |
 | `uniform_low` | Uniformly low risk | Default rules |
 
-### ReID Rules (QR0-QR9)
+### ReID Rules (QR0-QR10)
 
-The system uses 10 named rules for method selection based on risk patterns. Rules are evaluated in order — **first match wins**.
+The system uses 12 named rules for method selection based on risk patterns. Rules are evaluated in order — **first match wins**.
 
 | Rule | Pattern | ReID Characteristics | Method |
 |------|---------|---------------------|--------|
@@ -160,7 +160,8 @@ The system uses 10 named rules for method selection based on risk patterns. Rule
 | **QR7_Many_High_Risk** | Many high-risk | >10% records at risk >20% | **kANON (k=5)** |
 | **QR8_Mild_Categorical** | Mild categorical | 5% < ReID_95 ≤ 10%, categorical-only | **PRAM (p=0.20)** |
 | **QR8_Mild_Risk** | Mild | 5% < ReID_95 ≤ 20% | **kANON (k=3 or k=5)** |
-| **QR9_Low_Risk_**** | Low risk | ReID_95 ≤ 5% | **PRAM or kANON(k=3)** |
+| **QR9_Moderate_Risk_Continuous** | Moderate + continuous | 10% < ReID_95 ≤ 20%, continuous ≥ categorical | **RANKSWAP (p=10, R0=0.95)** |
+| **QR10_Low_Risk_Mixed** | Low risk + mixed | ReID_95 ≤ 10%, mixed variable types | **RECSWAP (swap_rate=0.05)** |
 
 ### K-Anonymity Feasibility Check (QR0)
 
@@ -181,13 +182,15 @@ If expected_eq_size < 3:
 - **DO reduce ReID** by ensuring no record is uniquely identifiable
 - Use when ReID reduction is the goal
 
-**Perturbation Methods** (PRAM, NOISE):
+**Perturbation Methods** (PRAM, NOISE, RANKSWAP, RECSWAP):
 - Modify values but don't change the uniqueness structure
 - **DO NOT reduce ReID** because each record may still be unique
-- Useful for preserving statistical properties (means, distributions)
+- Useful for preserving statistical properties (means, distributions, correlations)
 - Best when data already has low ReID and utility is priority
+- RANKSWAP: rank-based value swapping for numeric data — preserves rank correlations
+- RECSWAP: record swapping between similar records — preserves marginal distributions
 
-**Important**: Perturbation methods (PRAM, NOISE) do NOT reduce ReID because they don't create equivalence classes. Only structural methods (kANON, LOCSUPR) reduce re-identification risk.
+**Important**: Perturbation methods (PRAM, NOISE, RANKSWAP, RECSWAP) do NOT reduce ReID because they don't create equivalence classes. Only structural methods (kANON, LOCSUPR) reduce re-identification risk.
 
 ### Rule Priority (First Match Wins)
 
@@ -298,6 +301,8 @@ Quick reference for method selection:
 | Microdata | Low risk | Continuous only | NOISE |
 | Microdata | Low risk | Categorical only | PRAM |
 | Microdata | Low risk | Mixed (cat dominant) | PRAM |
+| Microdata | Moderate | Continuous + correlated | RANKSWAP (p=10, R0=0.95) |
+| Microdata | Low risk | Mixed types | RECSWAP (swap_rate=0.05) |
 
 ## Risk-Based Preprocessing Aggressiveness
 

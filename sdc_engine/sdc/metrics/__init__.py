@@ -29,6 +29,7 @@ from .risk_metric import (
 )
 from .utility import calculate_utility_metrics, calculate_information_loss
 from .ml_utility import compute_ml_utility, compute_ml_utility_multi
+from .pareto import pareto_optimal, risk_reduction
 
 __all__ = [
     # ReID risk metrics
@@ -55,4 +56,7 @@ __all__ = [
     # ML utility validation
     'compute_ml_utility',
     'compute_ml_utility_multi',
+    # Pareto analysis
+    'pareto_optimal',
+    'risk_reduction',
 ]

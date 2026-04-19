@@ -685,7 +685,7 @@ _MODE_MAP_SC = {
     "Smart Combo (adaptive)": "combo",
     "Manual": "manual",
 }
-_METHOD_OPTIONS_SC = ["kANON", "LOCSUPR", "PRAM", "NOISE"]
+_METHOD_OPTIONS_SC = ["kANON", "LOCSUPR", "PRAM", "NOISE", "RANKSWAP", "RECSWAP"]
 _MAX_SCENARIOS = 4
 
 if plan_df is not None and len(plan_df) > 0:
@@ -724,6 +724,11 @@ if plan_df is not None and len(plan_df) > 0:
                             sc_params = {"p_change": st.slider("p_change", 0.01, 0.50, 0.10, 0.01, key="_sc_p")}
                         elif sc_method == "NOISE":
                             sc_params = {"noise": st.slider("Noise", 0.01, 0.50, 0.10, 0.01, key="_sc_n")}
+                        elif sc_method == "RANKSWAP":
+                            sc_params = {"p": st.number_input("Rank distance (p)", 1, 100, 10, key="_sc_rsp"),
+                                         "R0": st.slider("R0", 0.50, 1.00, 0.95, 0.01, key="_sc_rsr0")}
+                        elif sc_method == "RECSWAP":
+                            sc_params = {"swap_rate": st.slider("Swap rate", 0.01, 0.50, 0.05, 0.01, key="_sc_recsw")}
 
                 st.info("The current preprocessing plan (as shown above) will be captured for this scenario.")
 
@@ -1076,7 +1081,7 @@ elif protect_mode == "Manual":
     if auto_rec.get("reason"):
         st.caption(f"Reason: {auto_rec['reason']}")
 
-    METHOD_OPTIONS = ["kANON", "LOCSUPR", "PRAM", "NOISE"]
+    METHOD_OPTIONS = ["kANON", "LOCSUPR", "PRAM", "NOISE", "RANKSWAP", "RECSWAP"]
     default_idx = METHOD_OPTIONS.index(auto_rec["method"]) if auto_rec["method"] in METHOD_OPTIONS else 0
     manual_method = st.selectbox("Protection method", METHOD_OPTIONS, index=default_idx)
     st.session_state["_manual_method"] = manual_method
@@ -1103,6 +1108,13 @@ elif protect_mode == "Manual":
         default_n = auto_params.get("noise", 0.10)
         noise_level = st.slider("Noise level", 0.01, 0.50, float(default_n), 0.01)
         st.session_state["_manual_params"] = {"noise": noise_level}
+    elif manual_method == "RANKSWAP":
+        p_val = st.number_input("Rank distance (p)", min_value=1, max_value=100, value=10)
+        r0_val = st.slider("Correlation preservation (R0)", 0.50, 1.00, 0.95, 0.01)
+        st.session_state["_manual_params"] = {"p": p_val, "R0": r0_val}
+    elif manual_method == "RECSWAP":
+        swap_rate = st.slider("Swap rate", 0.01, 0.50, 0.05, 0.01)
+        st.session_state["_manual_params"] = {"swap_rate": swap_rate}
 
     # Show fallbacks
     if auto_rec.get("fallbacks"):

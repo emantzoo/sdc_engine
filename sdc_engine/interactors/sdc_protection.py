@@ -55,6 +55,8 @@ MICRODATA_METHODS = {
     'PRAM': {'name': 'PRAM', 'description': 'Post-Randomization (category swapping)'},
     'NOISE': {'name': 'Noise Addition', 'description': 'Add random noise to continuous variables'},
     'LOCSUPR': {'name': 'Local Suppression', 'description': 'Targeted cell suppression for k-anonymity'},
+    'RANKSWAP': {'name': 'Rank Swapping', 'description': 'Rank-based value swapping preserving correlations'},
+    'RECSWAP': {'name': 'Record Swapping', 'description': 'Swap values between similar records'},
 }
 
 TABULAR_METHODS = {}  # Tabular methods removed; microdata methods cover all use cases
@@ -364,7 +366,7 @@ class SDCProtection:
         # Methods that take quasi_identifiers
         qi_methods = {'KANON', 'LOCSUPR'}
         # Methods that take 'variables' for column selection
-        var_methods = {'NOISE', 'PRAM'}
+        var_methods = {'NOISE', 'PRAM', 'RANKSWAP', 'RECSWAP'}
 
         upper = method.upper()
         if upper in qi_methods:
@@ -442,6 +444,8 @@ class SDCProtection:
             'PRAM': 'apply_pram',
             'NOISE': 'apply_noise',
             'LOCSUPR': 'apply_locsupr',
+            'RANKSWAP': 'apply_rankswap',
+            'RECSWAP': 'apply_recswap',
         }
         func_name = method_map.get(method.upper())
         if func_name is None:

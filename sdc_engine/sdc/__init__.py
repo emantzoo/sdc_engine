@@ -38,6 +38,8 @@ from .PRAM import apply_pram
 from .NOISE import apply_noise
 from .LOCSUPR import apply_locsupr
 from .GENERALIZE import apply_generalize, suggest_generalization
+from .RANKSWAP import apply_rankswap
+from .RECSWAP import apply_recswap
 
 # =============================================================================
 # Synthetic Data Release (archived — not exposed in UI)
@@ -132,6 +134,8 @@ __all__ = [
     'apply_locsupr',
     'apply_generalize',
     'suggest_generalization',
+    'apply_rankswap',
+    'apply_recswap',
     # Detection utilities
     'auto_detect_dimensions',
     'auto_detect_quasi_identifiers',

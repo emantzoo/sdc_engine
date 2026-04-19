@@ -55,10 +55,28 @@ METHOD_IMPLEMENTATION_QUALITY: Dict[str, Dict[str, Any]] = {
         'description': 'Local suppression for k-anonymity',
         'data_type': 'microdata',
     },
+    'RANKSWAP': {
+        'python_quality': 'GOOD',
+        'r_quality': 'N/A',
+        'quality_gap': 'NONE',
+        'r_package': None,
+        'default_to_r': False,
+        'description': 'Rank-based value swapping preserving correlations',
+        'data_type': 'microdata',
+    },
+    'RECSWAP': {
+        'python_quality': 'GOOD',
+        'r_quality': 'N/A',
+        'quality_gap': 'NONE',
+        'r_package': None,
+        'default_to_r': False,
+        'description': 'Record swapping between similar records',
+        'data_type': 'microdata',
+    },
 }
 
 # Method categories — microdata only (tabular methods removed)
-MICRODATA_METHODS = ['kANON', 'PRAM', 'NOISE', 'LOCSUPR']
+MICRODATA_METHODS = ['kANON', 'PRAM', 'NOISE', 'LOCSUPR', 'RANKSWAP', 'RECSWAP']
 TABULAR_METHODS: List[str] = []
 
 # =============================================================================
@@ -458,6 +476,24 @@ DATA_STRUCTURE_RULES: Dict[str, Dict[str, Any]] = {
         'confidence': 'HIGH',
         'reason': 'Categorical-only data - PRAM appropriate',
     },
+    'DS6_Continuous_Correlated': {
+        'trigger': 'n_continuous>=2 AND n_categorical==0 AND has_correlations',
+        'method': 'RANKSWAP',
+        'parameters': {'p': 10, 'R0': 0.95},
+        'priority': 'RECOMMENDED',
+        'confidence': 'HIGH',
+        'reason': 'Correlated continuous variables - rank swapping preserves correlations',
+        'alternatives': ['NOISE'],
+    },
+    'DS7_Mixed_Low_Risk': {
+        'trigger': 'n_continuous>=1 AND n_categorical>=1 AND reid_95<=0.20',
+        'method': 'RECSWAP',
+        'parameters': {'swap_rate': 0.05},
+        'priority': 'RECOMMENDED',
+        'confidence': 'MEDIUM',
+        'reason': 'Mixed variables at low risk - record swapping preserves distributions',
+        'alternatives': ['PRAM', 'NOISE'],
+    },
 }
 
 # =============================================================================
@@ -498,7 +534,7 @@ REID_RISK_RULES: Dict[str, Dict[str, Any]] = {
         'priority': 'REQUIRED',
         'confidence': 'HIGH',
         'reason': 'Widespread risk - PRAM perturbs broadly',
-        'alternatives': ['kANON'],
+        'alternatives': ['RECSWAP', 'kANON'],
     },
     'QR4_Widespread_Continuous': {
         'trigger': 'risk_pattern==widespread AND reid_50>0.15 AND n_continuous>=n_categorical',
@@ -507,7 +543,7 @@ REID_RISK_RULES: Dict[str, Dict[str, Any]] = {
         'priority': 'REQUIRED',
         'confidence': 'HIGH',
         'reason': 'Widespread risk - noise perturbs broadly',
-        'alternatives': ['kANON'],
+        'alternatives': ['RANKSWAP', 'kANON'],
     },
     'QR5_High_95th_Percentile': {
         'trigger': 'reid_95>0.20 AND reid_50<0.10',
@@ -540,6 +576,24 @@ REID_RISK_RULES: Dict[str, Dict[str, Any]] = {
         'priority': 'RECOMMENDED',
         'confidence': 'MEDIUM',
         'reason': 'Moderate risk - light perturbation sufficient',
+    },
+    'QR9_Moderate_Risk_Continuous': {
+        'trigger': '0.10<reid_95<=0.20 AND n_continuous>=n_categorical',
+        'method': 'RANKSWAP',
+        'parameters': {'p': 10, 'R0': 0.95},
+        'priority': 'RECOMMENDED',
+        'confidence': 'MEDIUM',
+        'reason': 'Moderate risk with continuous data - rank swapping preserves correlations',
+        'alternatives': ['NOISE'],
+    },
+    'QR10_Low_Risk_Mixed': {
+        'trigger': 'reid_95<=0.10 AND n_continuous>=1 AND n_categorical>=1',
+        'method': 'RECSWAP',
+        'parameters': {'swap_rate': 0.05},
+        'priority': 'RECOMMENDED',
+        'confidence': 'MEDIUM',
+        'reason': 'Low risk with mixed variables - record swapping is minimally invasive',
+        'alternatives': ['PRAM', 'NOISE'],
     },
 }
 # =============================================================================
@@ -627,6 +681,17 @@ DEFAULT_METHOD_PARAMETERS: Dict[str, Dict[str, Any]] = {
         'k': 3,
         'importance': None,
     },
+    'RANKSWAP': {
+        'p': 10,
+        'R0': 0.95,
+        'top_percent': 1.0,
+        'bottom_percent': 1.0,
+    },
+    'RECSWAP': {
+        'swap_rate': 0.05,
+        'match_variables': None,
+        'within_strata': None,
+    },
 }
 
 # =============================================================================
@@ -665,10 +730,12 @@ PARAMETER_TUNING_SCHEDULES: Dict[str, Dict[str, Any]] = {
 # =============================================================================
 
 METHOD_FALLBACK_ORDER: Dict[str, List[str]] = {
-    'kANON': ['LOCSUPR', 'PRAM', 'NOISE'],
-    'PRAM': ['kANON', 'LOCSUPR', 'NOISE'],
-    'NOISE': ['kANON', 'PRAM', 'LOCSUPR'],
-    'LOCSUPR': ['kANON', 'PRAM', 'NOISE'],
+    'kANON': ['LOCSUPR', 'PRAM', 'NOISE', 'RANKSWAP'],
+    'PRAM': ['kANON', 'LOCSUPR', 'NOISE', 'RECSWAP'],
+    'NOISE': ['RANKSWAP', 'kANON', 'PRAM', 'LOCSUPR'],
+    'LOCSUPR': ['kANON', 'PRAM', 'NOISE', 'RECSWAP'],
+    'RANKSWAP': ['NOISE', 'kANON', 'PRAM', 'LOCSUPR'],
+    'RECSWAP': ['PRAM', 'RANKSWAP', 'kANON', 'LOCSUPR'],
 }
 
 # =============================================================================
@@ -680,7 +747,7 @@ METHOD_FALLBACK_ORDER: Dict[str, List[str]] = {
 # (perturbation of sensitive values increases diversity) but blocks NOISE.
 
 METRIC_ALLOWED_METHODS: Dict[str, List[str]] = {
-    'reid95': ['kANON', 'LOCSUPR', 'PRAM', 'NOISE'],
+    'reid95': ['kANON', 'LOCSUPR', 'PRAM', 'NOISE', 'RANKSWAP', 'RECSWAP'],
     'k_anonymity': ['kANON', 'LOCSUPR'],
     'uniqueness': ['kANON', 'LOCSUPR'],
     'l_diversity': ['kANON', 'LOCSUPR', 'PRAM'],
@@ -803,6 +870,20 @@ METHOD_INFO: Dict[str, Dict[str, str]] = {
         'type': 'microdata',
         'preserves': 'Most values',
         'risk': 'Very low',
+    },
+    'RANKSWAP': {
+        'name': 'Rank Swapping',
+        'short': 'Swap values within rank distance',
+        'type': 'microdata',
+        'preserves': 'Rank correlations',
+        'risk': 'Low-medium',
+    },
+    'RECSWAP': {
+        'name': 'Record Swapping',
+        'short': 'Swap values between similar records',
+        'type': 'microdata',
+        'preserves': 'Marginal distributions',
+        'risk': 'Low-medium',
     },
 }
 

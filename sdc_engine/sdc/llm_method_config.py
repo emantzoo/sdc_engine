@@ -89,15 +89,19 @@ AVAILABLE PROTECTION METHODS (applied after preprocessing):
 - LOCSUPR: Local suppression -- blanks specific cells in risky records. Targeted. Best when: risk concentrated in 1-2 QIs, or as fallback when kANON suppression exceeds 15%.
 - PRAM: Post-randomization -- perturbs categorical values. Preserves ALL records (zero suppression). Best for: all-categorical QIs at low-moderate risk. NOT effective when one category dominates >80%.
 - NOISE: Noise addition -- adds calibrated random noise. Preserves distributions. Best for: numeric-dominant QIs, or when suppression must be avoided. NOT effective on categorical data.
+- RANKSWAP: Rank-based value swapping -- swaps values between records within a rank distance p. Preserves rank correlations and marginal distributions. Zero suppression. Best for: numeric-dominant QIs where correlation preservation matters (e.g., income vs age). Params: p (rank distance, default 10), R0 (correlation preservation threshold, default 0.95).
+- RECSWAP: Record swapping -- swaps values between similar records based on matching variables. Preserves marginal distributions. Zero suppression. Best for: categorical or mixed QIs at low-moderate risk where maintaining group-level statistics matters. Params: swap_rate (fraction of records to swap, default 0.05), match_variables (optional list of variables to match on), within_strata (optional stratification variable).
 
 METHOD SELECTION — choose based on actual data, NOT defaults:
 - ALL categorical QIs + low risk (<20%) → PRAM (preserves all records, no suppression)
 - ALL categorical QIs + moderate risk (20-40%) → PRAM with higher p_change, or kANON if suppression estimate is low
 - Mostly numeric QIs + low-moderate risk → NOISE (preserves distributions)
+- Mostly numeric QIs + correlation preservation needed → RANKSWAP (preserves rank correlations, zero suppression)
 - Mixed QI types + high risk → kANON (strongest guarantee)
 - Risk concentrated in 1-2 QIs → LOCSUPR (targeted suppression)
-- Estimated suppression > 15% after preprocessing → prefer PRAM/NOISE over kANON
-- Small dataset (<5000 rows) → prefer PRAM/NOISE (structural methods cause excessive suppression)
+- Mixed QIs + low-moderate risk + group statistics matter → RECSWAP (swaps between similar records)
+- Estimated suppression > 15% after preprocessing → prefer PRAM/NOISE/RANKSWAP/RECSWAP over kANON
+- Small dataset (<5000 rows) → prefer PRAM/NOISE/RANKSWAP/RECSWAP (structural methods cause excessive suppression)
 - Large dataset (>10K) + high risk + mixed types → kANON is viable
 NEVER recommend kANON with k>5 unless ReID95 > 40% after preprocessing.
 
@@ -146,7 +150,7 @@ Respond ONLY in JSON format:
     "override_reason": "why you disagree (omit if agrees=true)"
   },
   "protection": {
-    "method": "kANON|LOCSUPR|PRAM|NOISE",
+    "method": "kANON|LOCSUPR|PRAM|NOISE|RANKSWAP|RECSWAP",
     "params": {},
     "reasoning": "2-3 sentences referencing the combo space math AND the rules engine recommendation",
     "estimated_suppression": "e.g. ~8%",
@@ -178,7 +182,7 @@ No markdown, no preamble, no explanation outside the JSON."""
 # ---------------------------------------------------------------------------
 # Validation constants
 # ---------------------------------------------------------------------------
-VALID_METHODS = {"kANON", "LOCSUPR", "PRAM", "NOISE"}
+VALID_METHODS = {"kANON", "LOCSUPR", "PRAM", "NOISE", "RANKSWAP", "RECSWAP"}
 VALID_TREATMENTS = {"Heavy", "Standard", "Light"}
 VALID_ACTIONS = {
     "skip", "generalize", "date_truncate", "age_bin",
@@ -193,6 +197,9 @@ PARAM_RANGES = {
     "k": (2, 50),
     "p_change": (0.05, 0.50),
     "magnitude": (0.01, 0.50),
+    "p": (1, 100),
+    "R0": (0.50, 1.00),
+    "swap_rate": (0.01, 0.50),
     "max_categories": (3, 50),
     "max_suppression_rate": (0.01, 0.30),
     "bin_size": (2, 50),
