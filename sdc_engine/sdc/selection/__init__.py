@@ -46,6 +46,9 @@ from .rules import (
     distribution_rules,
     default_rules,
     select_method_by_features,
+    public_release_rules,
+    secure_environment_rules,
+    regulatory_compliance_rules,
 )
 from .pipelines import (
     build_dynamic_pipeline,
@@ -76,6 +79,10 @@ __all__ = [
     'distribution_rules',
     'default_rules',
     'select_method_by_features',
+    # Context-aware rules
+    'public_release_rules',
+    'secure_environment_rules',
+    'regulatory_compliance_rules',
     # Pipeline rules
     'build_dynamic_pipeline',
     'pipeline_rules',

@@ -408,9 +408,12 @@ def select_method_suite(
         small_dataset_rules,
         structural_risk_rules,
         risk_concentration_rules,
+        regulatory_compliance_rules,
+        public_release_rules,
         categorical_aware_rules,
         l_diversity_rules,
         temporal_dominant_rules,
+        secure_environment_rules,
         reid_risk_rules,
         low_risk_rules,
         distribution_rules,
@@ -420,6 +423,9 @@ def select_method_suite(
     )
 
     from ..config import is_method_allowed_for_metric
+
+    # Propagate context into features so context-aware rules can read it
+    features['_access_tier'] = access_tier.upper()
 
     qis = features.get('quasi_identifiers', [])
     reid_95 = features.get('reid_95', 0.5)
@@ -499,10 +505,13 @@ def select_method_suite(
 
     # Apply rules in priority order (first match wins) — lazy evaluation
     rule_factories = [
+        regulatory_compliance_rules,   # REG1 — first (PUBLIC + target=3%)
         data_structure_rules,
         small_dataset_rules,
         structural_risk_rules,
         risk_concentration_rules,
+        public_release_rules,          # PUB1 — before CAT (PUBLIC + target=1%)
+        secure_environment_rules,      # SEC1 — before CAT (SECURE tier)
         categorical_aware_rules,
         l_diversity_rules,
         temporal_dominant_rules,
