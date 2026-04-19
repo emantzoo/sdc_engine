@@ -554,7 +554,9 @@ def apply_locsupr(
             # classes first (most impactful for k-anonymity).
             suppress_indices = suppress_mask[suppress_mask].index
             _eq_sizes = qi_data.loc[suppress_indices].groupby(
-                list(quasi_identifiers), dropna=False).transform('size').iloc[:, 0]
+                list(quasi_identifiers), dropna=False).transform('size')
+            if isinstance(_eq_sizes, pd.DataFrame):
+                _eq_sizes = _eq_sizes.iloc[:, 0]
             keep_indices = _eq_sizes.nsmallest(remaining_col_budget).index
             suppress_mask = pd.Series(False, index=protected_data.index)
             suppress_mask[keep_indices] = True
