@@ -626,57 +626,22 @@ def _pipeline_rules(features: Dict) -> Dict:
     return {'applies': False}
 
 
-def select_method_by_features(
-    data: pd.DataFrame,
-    analysis: Dict,
-    quasi_identifiers: Optional[List[str]] = None,
-    structural_risk: float = 0.0,
-    verbose: bool = True,
-    risk_metric: Optional[str] = None,
-    risk_target_raw: Optional[float] = None,
-) -> Dict:
+def select_method_by_features(*args, **kwargs):
+    """Removed in favor of sdc_engine.sdc.selection.select_method_by_features.
+
+    This legacy stub raises ImportError to catch any accidental imports.
+    If you reached this error, update your import:
+
+        # Old:
+        from sdc_engine.sdc.select_method import select_method_by_features
+
+        # New:
+        from sdc_engine.sdc.selection import select_method_by_features
     """
-    Select SDC method based on data features and risk metrics.
-
-    .. deprecated::
-        Use ``selection.select_method_by_features()`` (from rules.py) or
-        ``select_method_suite()`` instead.  This legacy version uses a
-        reduced 5-rule chain that is missing CAT1/CAT2, LDIV1, DATE1,
-        RC1-RC4, SR3, and HR6 rules.
-
-    Parameters:
-    -----------
-    data : pd.DataFrame
-        Input data
-    analysis : dict
-        Output from analyze_data()
-    quasi_identifiers : list, optional
-        QI columns
-    structural_risk : float
-        QI-scoped backward elimination risk (0-1).
-    verbose : bool
-        Print selection details
-    risk_metric : str, optional
-        'reid95', 'k_anonymity', or 'uniqueness'. Default 'reid95'.
-    risk_target_raw : float, optional
-        Raw target for the chosen metric.
-
-    Returns:
-    --------
-    dict : {method, parameters, rule, confidence, reason}
-    """
-    import warnings
-    warnings.warn(
-        "select_method_by_features() in select_method.py is deprecated. "
-        "Use selection.select_method_by_features() (rules.py) or "
-        "select_method_suite() instead — this version uses a reduced "
-        "rule chain missing CAT1/CAT2, LDIV1, DATE1, RC1-RC4.",
-        DeprecationWarning, stacklevel=2,
+    raise ImportError(
+        "select_method_by_features has moved to sdc_engine.sdc.selection. "
+        "Update your import."
     )
-
-    # Delegate to the full rule chain in selection.rules
-    from sdc_engine.sdc.selection.rules import select_method_by_features as _full_select
-    return _full_select(data, analysis, quasi_identifiers, verbose=verbose)
 
 
 # =============================================================================
@@ -806,7 +771,8 @@ def recommend_method(
             if quasi_identifiers is None:
                 quasi_identifiers = analysis.get('quasi_identifiers', [])
 
-            reid_result = select_method_by_features(data, analysis, quasi_identifiers, verbose=False)
+            from sdc_engine.sdc.selection.rules import select_method_by_features as _select
+            reid_result = _select(data, analysis, quasi_identifiers, verbose=False)
 
             # Single method recommended (pipeline escalation handled by smart_protect if needed)
             recommendation['primary'] = reid_result['method']
