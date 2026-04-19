@@ -701,3 +701,22 @@ One threshold differs between branches and should be reconciled:
 | Threshold | auto_sdc_v2_manly | MicroSDC | Which is better? |
 |---|---|---|---|
 | HIGH QI classification | Fixed ≥ 15% contribution | Relative ≥ 1.5× mean | Fixed is more stable across dataset sizes. MicroSDC should consider adopting fixed thresholds |
+
+---
+
+## Related Test Suites
+
+### Known-Case Regression Tests (`tests/test_rule_selection_known_cases.py`)
+
+24 tests across 8 test classes verifying that each rule fires as designed on synthetic data. Each test constructs a minimal dataset targeting exactly one rule (or a specific guard condition). Covers QR1, QR2, QR4, MED1, RC1, CAT1, DYN_CAT, LOW1-LOW3, SR3, HR6, HR1/HR3, rule priority ordering, and dominance guard.
+
+Key findings during builder construction (2026-04-20):
+- **RC rules (RC1-RC4) are dormant** in the normal pipeline. `extract_data_features_with_reid()` always returns `uniqueness_rate=0` and empty `var_priority`, so RC and HR1-HR5 rules never fire through `select_method_suite()`. Tests inject these features manually.
+- **DYN_CAT_Pipeline preempts CAT2.** The pipeline_rules check fires before rule_factories, so `CAT2_Mixed_Categorical_Majority` is unreachable when `DYN_CAT_Pipeline` has the same condition.
+- **QR0 (GENERALIZE_FIRST) is skipped under reid95.** `GENERALIZE_FIRST` is not in `METRIC_ALLOWED_METHODS['reid95']`, so infeasible datasets fall through to HR-series or DEFAULT.
+
+Run: `python -m pytest tests/test_rule_selection_known_cases.py -v` (~1.5s, no R/sdcMicro required).
+
+### Empirical Threshold Validation (`tests/empirical/`)
+
+80-run harness testing 4 thresholds across 8 real datasets. See `tests/empirical/reports/SUMMARY.md` for full results and crossover analysis.
