@@ -43,6 +43,8 @@ def run_matrix(
         for ds in relevant_datasets:
             print(f"[{threshold.id}] Dataset: {ds.name}")
             df = ds.load()
+            # Drop rows with NaN in QI columns to avoid downstream errors
+            df = df.dropna(subset=ds.quasi_identifiers).reset_index(drop=True)
             for value in threshold.test_values:
                 print(f"  value={value}", end=" ... ", flush=True)
                 outcome = run_outcome(
