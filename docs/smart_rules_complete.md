@@ -873,3 +873,6 @@ The Configure tab supports a Generate Plan → Review → Apply workflow:
 | `sdc/llm_assistant.py` | Cerebras API wrapper (ai_sdc_manly only) |
 | `sdc/llm_classify.py` | LLM column classification (ai_sdc_manly only) |
 | `sdc/llm_method_config.py` | LLM method selection + review mode (ai_sdc_manly only) |
+| `tests/test_rule_selection_known_cases.py` | 24 known-case regression tests for rule selection |
+| `tests/fixtures/rule_test_builders.py` | Deterministic dataset builders for rule testing |
+| `tests/empirical/` | Empirical threshold validation harness (8 datasets, 4 thresholds) |

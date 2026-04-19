@@ -368,3 +368,6 @@ METHOD_INFO['LOCSUPR']
 
 - [Pipeline Architecture](sdc_pipeline_architecture.md) — Full system architecture + SDC Engine integration
 - [User Guide](user_guide.md) — End-to-end user workflow documentation
+- [Empirical Validation Checklist](empirical_validation_checklist.md) — Threshold calibration status + known-case test findings
+- `tests/test_rule_selection_known_cases.py` — 24 regression tests verifying each rule fires correctly
+- `tests/empirical/reports/SUMMARY.md` — Empirical validation results (80 runs, 3 crossovers)
