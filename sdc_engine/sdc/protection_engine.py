@@ -482,6 +482,149 @@ def _get_utility_score(result) -> Optional[float]:
     return result.utility_score
 
 
+def _try_perturbative_challenge(
+    structural_result: Any,
+    structural_method: str,
+    input_data: pd.DataFrame,
+    quasi_identifiers: List[str],
+    data_features: Dict[str, Any],
+    apply_method_fn: Callable,
+    risk_target_raw: Optional[float],
+    log_entries: List[str],
+) -> Optional[Any]:
+    """Try PRAM as a post-success challenge to a structural method.
+
+    Returns the PRAM result if it beats the structural result on utility
+    (by at least min_utility_gain) AND meets the same risk target.
+    Returns None otherwise.
+
+    The challenge runs at most once per protection call.
+    """
+    from sdc_engine.sdc.config import PERTURBATIVE_CHALLENGE
+
+    cfg = PERTURBATIVE_CHALLENGE
+    if not cfg.get('enabled', True):
+        return None
+
+    # Gate 1: method must be structural
+    if structural_method.upper() not in ('KANON', 'LOCSUPR'):
+        return None
+
+    # Gate 2: categorical ratio
+    n_cat = data_features.get('n_categorical', 0)
+    n_cont = data_features.get('n_continuous', 0)
+    total = n_cat + n_cont
+    if total == 0:
+        return None
+    cat_ratio = n_cat / total
+    if cat_ratio < cfg['min_cat_ratio']:
+        return None
+
+    # Gate 3: reid_95 low enough that PRAM could plausibly hit target
+    reid_95 = data_features.get('reid_95', 1.0)
+    if reid_95 > cfg['max_reid_95']:
+        return None
+
+    # Gate 4: structural result showed meaningful suppression
+    supp_detail = getattr(structural_result, 'qi_suppression_detail', None) or {}
+    if supp_detail:
+        max_supp = max(supp_detail.values()) if supp_detail else 0
+    else:
+        # Fall back to metadata statistics if available
+        meta = getattr(structural_result, 'metadata', None) or {}
+        stats = meta.get('statistics', {}) if isinstance(meta, dict) else {}
+        max_supp = stats.get('suppression_rate', 0)
+
+    if max_supp < cfg['min_structural_suppression']:
+        log.debug(
+            "[PerturbativeChallenge] Skipped — structural suppression "
+            "%.1f%% below threshold %.1f%%",
+            max_supp * 100, cfg['min_structural_suppression'] * 100)
+        return None
+
+    # Build PRAM params — scale p by reid_95
+    p_change = min(
+        cfg['max_p'],
+        cfg['base_p'] + reid_95 * cfg['scale_p']
+    )
+    p_change = round(p_change, 2)
+
+    # PRAM variables: top categorical QIs
+    from sdc_engine.sdc.selection.features import top_categorical_qis
+    pram_vars = top_categorical_qis(data_features) or [
+        qi for qi in quasi_identifiers
+        if qi in data_features.get('categorical_vars', [])
+    ]
+    if not pram_vars:
+        return None
+
+    pram_params = {'variables': pram_vars, 'p_change': p_change}
+    log_entries.append(
+        f"  Perturbative challenge: trying PRAM(p={p_change}) "
+        f"after {structural_method} success (cat_ratio={cat_ratio:.0%}, "
+        f"supp={max_supp:.1%})"
+    )
+    log.info(
+        "[PerturbativeChallenge] Running PRAM p=%.2f vars=%s",
+        p_change, pram_vars)
+
+    try:
+        pram_result = apply_method_fn(
+            'PRAM', quasi_identifiers, pram_params, input_data=input_data,
+        )
+    except Exception as exc:
+        log.warning("[PerturbativeChallenge] PRAM raised: %s", exc)
+        return None
+
+    if not pram_result or not pram_result.success:
+        log_entries.append("    PRAM challenge failed — keeping structural result")
+        return None
+
+    # Compare: PRAM must meet the same risk target AND gain at least
+    # min_utility_gain percentage points
+    pram_reid = _get_reid_95(pram_result)
+    struct_reid = _get_reid_95(structural_result)
+    pram_util = _get_utility_score(pram_result) or 0
+    struct_util = _get_utility_score(structural_result) or 0
+
+    if risk_target_raw is not None and pram_reid is not None:
+        if pram_reid > risk_target_raw:
+            log_entries.append(
+                f"    PRAM challenge missed target "
+                f"(ReID={pram_reid:.4f} > {risk_target_raw:.4f}) — keeping structural"
+            )
+            return None
+
+    utility_gain = pram_util - struct_util
+    if utility_gain < cfg['min_utility_gain']:
+        log_entries.append(
+            f"    PRAM challenge utility gain insufficient "
+            f"({utility_gain:+.2%} < {cfg['min_utility_gain']:.0%}) — keeping structural"
+        )
+        return None
+
+    log_entries.append(
+        f"  PRAM challenge WON: utility {struct_util:.1%} -> {pram_util:.1%} "
+        f"({utility_gain:+.2%}), "
+        f"ReID {f'{struct_reid:.4f}' if struct_reid is not None else 'N/A'} -> "
+        f"{f'{pram_reid:.4f}' if pram_reid is not None else 'N/A'}"
+    )
+    log.info(
+        "[PerturbativeChallenge] Accepted: utility %.1f%% -> %.1f%% (+%.1f%%)",
+        struct_util * 100, pram_util * 100, utility_gain * 100)
+
+    # Tag the result so downstream can see it was a challenge win
+    if pram_result.metadata is None:
+        pram_result.metadata = {}
+    pram_result.metadata['perturbative_challenge'] = {
+        'replaced_method': structural_method,
+        'structural_utility': struct_util,
+        'pram_utility': pram_util,
+        'utility_gain': utility_gain,
+    }
+    return pram_result
+
+
 def _pick_escalation_start(
     schedule_values: List, reid_current: float, reid_target: float,
 ) -> int:
@@ -532,136 +675,6 @@ _CROSS_METHOD_START = {
 }
 
 
-def _challenge_with_perturbative(
-    input_data: pd.DataFrame,
-    best_result,
-    data_features: Dict,
-    quasi_identifiers: List[str],
-    reid_target: float,
-    target_k: int,
-    utility_floor: float,
-    apply_method_fn,
-    log_entries: List[str],
-    utility_gain_threshold: float = 0.03,
-) -> Optional[Any]:
-    """Try PRAM after a structural method succeeded.
-
-    If PRAM meets the same targets with measurably better utility,
-    returns the PRAM result.  Otherwise returns None (keep primary).
-
-    Gate conditions (all must be true):
-    - Primary method is structural (kANON or LOCSUPR)
-    - ≥50% categorical QIs
-    - ReID95 before ≤ 30%
-    - Primary suppression rate > 3%
-    """
-    if best_result is None or not best_result.success:
-        return None
-
-    primary_method = getattr(best_result, 'method_used', '')
-    if primary_method not in ('kANON', 'LOCSUPR'):
-        return None
-
-    n_cat = data_features.get('n_categorical', 0)
-    n_cont = data_features.get('n_continuous', 0)
-    total = n_cat + n_cont
-    if total == 0 or n_cat / total < 0.50:
-        return None
-
-    reid_before = data_features.get('reid_95', 1.0)
-    if reid_before > 0.30:
-        return None
-
-    primary_suppression = getattr(best_result, 'suppression_rate', 0) or 0
-    if primary_suppression <= 0.03:
-        return None
-
-    primary_utility = getattr(best_result, 'utility_score', 0) or 0
-
-    # Calibrate PRAM p_change from primary's reid gap
-    reid_after = _get_reid_95(best_result) or reid_before
-    if reid_after <= reid_target * 0.5:
-        p_challenge = 0.15
-    elif reid_after <= reid_target * 0.8:
-        p_challenge = 0.20
-    else:
-        p_challenge = 0.25
-
-    from sdc_engine.sdc.selection.features import _top_categorical_qis
-    cat_vars = _top_categorical_qis(data_features, n=min(7, n_cat))
-    if not cat_vars:
-        return None
-
-    log.info("[Challenge] Trying PRAM p=%.2f on %d categorical QIs "
-             "(primary %s: utility=%.1f%%, suppression=%.1f%%)",
-             p_challenge, len(cat_vars), primary_method,
-             primary_utility * 100, primary_suppression * 100)
-    log_entries.append(
-        f"Perturbative challenge: PRAM p={p_challenge} on "
-        f"{len(cat_vars)} categorical QIs")
-
-    try:
-        pram_params = {
-            'variables': cat_vars,
-            'p_change': p_challenge,
-        }
-        pram_result = apply_method_fn(
-            'PRAM', quasi_identifiers, pram_params,
-            input_data=input_data,
-        )
-        if not pram_result or not pram_result.success:
-            log.info("[Challenge] PRAM failed")
-            log_entries.append("  Challenge: PRAM failed")
-            return None
-
-        pram_reid = _get_reid_95(pram_result)
-        pram_utility = getattr(pram_result, 'utility_score', 0) or 0
-
-        # Check targets
-        pram_meets_reid = (pram_reid is not None and pram_reid <= reid_target)
-        pram_meets_k = True  # PRAM doesn't suppress, k check via reid_after
-        if hasattr(pram_result, 'reid_after') and pram_result.reid_after:
-            _k_check = pram_result.reid_after.get('min_k')
-            if _k_check is not None:
-                pram_meets_k = _k_check >= target_k
-
-        if not (pram_meets_reid and pram_meets_k):
-            log.info("[Challenge] PRAM did not meet targets "
-                     "(reid=%s, target=%.1f%%)",
-                     f"{pram_reid:.1%}" if pram_reid else "N/A",
-                     reid_target * 100)
-            log_entries.append("  Challenge: PRAM did not meet targets")
-            return None
-
-        utility_gain = pram_utility - primary_utility
-        if utility_gain > utility_gain_threshold:
-            log.info("[Challenge] PRAM wins: utility %.1f%% vs %.1f%% "
-                     "(+%.1f%%, zero suppression)",
-                     pram_utility * 100, primary_utility * 100,
-                     utility_gain * 100)
-            log_entries.append(
-                f"\u2713 Challenge accepted: PRAM utility "
-                f"{pram_utility:.0%} vs {primary_method} {primary_utility:.0%} "
-                f"(+{utility_gain:.0%})")
-            pram_result.metadata = pram_result.metadata or {}
-            pram_result.metadata['challenge_info'] = (
-                f"Perturbative challenge: PRAM p={p_challenge} achieved "
-                f"target with {utility_gain:.0%} better utility than "
-                f"{primary_method} ({pram_utility:.0%} vs {primary_utility:.0%})")
-            return pram_result
-        else:
-            log.info("[Challenge] PRAM did not improve enough "
-                     "(utility gain %.1f%% < %.1f%% threshold)",
-                     utility_gain * 100, utility_gain_threshold * 100)
-            log_entries.append(
-                f"  Challenge: PRAM utility gain {utility_gain:.0%} "
-                f"< {utility_gain_threshold:.0%} threshold — keeping {primary_method}")
-            return None
-
-    except Exception as e:
-        log.warning("[Challenge] PRAM attempt failed: %s", e)
-        log_entries.append(f"  Challenge: PRAM failed ({e})")
-        return None
 
 
 def _step_down_k(
@@ -1326,6 +1339,20 @@ def run_rules_engine_protection(
                     timing['pipeline'] = round(time.monotonic() - t_phase, 2)
                     timing['total'] = round(time.monotonic() - t_total, 2)
                     timing['escalation_steps'] = 0
+                    # Perturbative challenge: try PRAM as potentially better alternative
+                    if best_result and best_result.success:
+                        _challenger = _try_perturbative_challenge(
+                            structural_result=best_result,
+                            structural_method=getattr(best_result, 'method', '') or '',
+                            input_data=input_data,
+                            quasi_identifiers=quasi_identifiers,
+                            data_features=data_features,
+                            apply_method_fn=apply_method_fn,
+                            risk_target_raw=risk_target_raw,
+                            log_entries=log_entries,
+                        )
+                        if _challenger is not None:
+                            best_result = _challenger
                     _attach_diagnostics(
                         best_result, log_entries, data_features,
                         quasi_identifiers, reid_target, timing,
@@ -1496,6 +1523,20 @@ def run_rules_engine_protection(
             timing['primary_escalation'] = round(time.monotonic() - t_phase, 2)
             timing['total'] = round(time.monotonic() - t_total, 2)
             timing['escalation_steps'] = 0
+            # Perturbative challenge: try PRAM as potentially better alternative
+            if best_result and best_result.success:
+                _challenger = _try_perturbative_challenge(
+                    structural_result=best_result,
+                    structural_method=getattr(best_result, 'method', '') or '',
+                    input_data=input_data,
+                    quasi_identifiers=quasi_identifiers,
+                    data_features=data_features,
+                    apply_method_fn=apply_method_fn,
+                    risk_target_raw=risk_target_raw,
+                    log_entries=log_entries,
+                )
+                if _challenger is not None:
+                    best_result = _challenger
             _attach_diagnostics(
                 best_result, log_entries, data_features,
                 quasi_identifiers, reid_target, timing,
@@ -1613,6 +1654,20 @@ def run_rules_engine_protection(
                     timing['primary_escalation'] = round(time.monotonic() - t_phase, 2)
                     timing['total'] = round(time.monotonic() - t_total, 2)
                     timing['escalation_steps'] = escalation_count
+                    # Perturbative challenge: try PRAM as potentially better alternative
+                    if best_result and best_result.success:
+                        _challenger = _try_perturbative_challenge(
+                            structural_result=best_result,
+                            structural_method=getattr(best_result, 'method', '') or '',
+                            input_data=input_data,
+                            quasi_identifiers=quasi_identifiers,
+                            data_features=data_features,
+                            apply_method_fn=apply_method_fn,
+                            risk_target_raw=risk_target_raw,
+                            log_entries=log_entries,
+                        )
+                        if _challenger is not None:
+                            best_result = _challenger
                     _attach_diagnostics(
                         best_result, log_entries, data_features,
                         quasi_identifiers, reid_target, timing,
@@ -1849,15 +1904,14 @@ def run_rules_engine_protection(
             log.info("[Protection] Accepted k step-down")
 
         # Check 2: Could PRAM beat the (possibly stepped-down) structural result?
-        challenge_result = _challenge_with_perturbative(
+        challenge_result = _try_perturbative_challenge(
+            structural_result=best_result,
+            structural_method=getattr(best_result, 'method', '') or '',
             input_data=input_data,
-            best_result=best_result,
-            data_features=data_features,
             quasi_identifiers=quasi_identifiers,
-            reid_target=reid_target,
-            target_k=_target_k,
-            utility_floor=utility_floor,
+            data_features=data_features,
             apply_method_fn=apply_method_fn,
+            risk_target_raw=risk_target_raw,
             log_entries=log_entries,
         )
         if challenge_result is not None:
