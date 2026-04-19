@@ -59,38 +59,60 @@ class TestEmptyDatasets:
     """Verify clear error when no datasets registered."""
 
     def test_run_matrix_raises(self):
+        # Use a dataset filter that matches nothing
         with pytest.raises(RuntimeError, match="No datasets registered"):
-            run_matrix()
+            run_matrix(dataset_names=["__nonexistent__"])
+
+
+def _make_row(tid, ds, value, rule, initial_method, method, error=None):
+    """Helper to create a test row with all required columns."""
+    return {
+        "threshold_id": tid, "dataset": ds, "threshold_value": value,
+        "selected_rule": rule, "initial_method": initial_method,
+        "selected_method": method, "error": error,
+    }
 
 
 class TestCrossoverDetection:
     """Verify crossover detection on synthetic data."""
 
-    def test_detects_crossover(self):
-        """Method changes from kANON at low value to LOCSUPR at high value."""
+    def test_detects_rule_crossover(self):
+        """Rule changes from LOW3 at low value to LOW1 at high value."""
         rows = [
-            {"threshold_id": "T1", "dataset": "test", "threshold_value": 0.30,
-             "selected_method": "kANON", "error": None},
-            {"threshold_id": "T1", "dataset": "test", "threshold_value": 0.35,
-             "selected_method": "kANON", "error": None},
-            {"threshold_id": "T1", "dataset": "test", "threshold_value": 0.40,
-             "selected_method": "LOCSUPR", "error": None},
-            {"threshold_id": "T1", "dataset": "test", "threshold_value": 0.45,
-             "selected_method": "LOCSUPR", "error": None},
+            _make_row("T4", "test", 0.05, "LOW3_Mixed", "kANON", "kANON"),
+            _make_row("T4", "test", 0.075, "LOW3_Mixed", "kANON", "kANON"),
+            _make_row("T4", "test", 0.10, "LOW1_Categorical", "PRAM", "kANON"),
+            _make_row("T4", "test", 0.125, "LOW1_Categorical", "PRAM", "kANON"),
+        ]
+        df = pd.DataFrame(rows)
+        xovers = find_crossovers(df)
+
+        assert len(xovers) == 1
+        assert xovers.iloc[0]['observed_crossover'] == 0.10
+        assert xovers.iloc[0]['threshold_id'] == 'T4'
+        assert xovers.iloc[0]['low_rule'] == 'LOW3_Mixed'
+        assert xovers.iloc[0]['high_rule'] == 'LOW1_Categorical'
+        assert not xovers.iloc[0]['method_changed']  # both are kANON output
+
+    def test_detects_method_crossover(self):
+        """Method changes from kANON to LOCSUPR (also rule change)."""
+        rows = [
+            _make_row("T1", "test", 0.30, "QR2_kANON", "kANON", "kANON"),
+            _make_row("T1", "test", 0.35, "QR2_kANON", "kANON", "kANON"),
+            _make_row("T1", "test", 0.40, "RC1_LOCSUPR", "LOCSUPR", "LOCSUPR"),
+            _make_row("T1", "test", 0.45, "RC1_LOCSUPR", "LOCSUPR", "LOCSUPR"),
         ]
         df = pd.DataFrame(rows)
         xovers = find_crossovers(df)
 
         assert len(xovers) == 1
         assert xovers.iloc[0]['observed_crossover'] == 0.40
-        assert xovers.iloc[0]['threshold_id'] == 'T1'
-        assert xovers.iloc[0]['shift_pp'] == 0  # 0.40 is current value
+        assert xovers.iloc[0]['method_changed']
 
     def test_no_crossover(self):
-        """Same method at all values -> no crossover."""
+        """Same rule and method at all values -> no crossover."""
         rows = [
-            {"threshold_id": "T2", "dataset": "test", "threshold_value": v,
-             "selected_method": "PRAM", "error": None}
+            _make_row("T2", "test", v, "MED1", "kANON", "kANON")
             for v in [0.60, 0.65, 0.70, 0.75, 0.80]
         ]
         df = pd.DataFrame(rows)
@@ -98,25 +120,14 @@ class TestCrossoverDetection:
         assert len(xovers) == 0
 
     def test_flags_large_shift(self):
-        """Crossover at 0.30 when current is 0.40 -> shift -10pp -> flagged."""
+        """Crossover far from current value -> flagged."""
         rows = [
-            {"threshold_id": "T1", "dataset": "test", "threshold_value": 0.30,
-             "selected_method": "LOCSUPR", "error": None},
-            {"threshold_id": "T1", "dataset": "test", "threshold_value": 0.35,
-             "selected_method": "LOCSUPR", "error": None},
-            {"threshold_id": "T1", "dataset": "test", "threshold_value": 0.40,
-             "selected_method": "kANON", "error": None},
+            _make_row("T1", "test", 0.30, "RuleA", "LOCSUPR", "LOCSUPR"),
+            _make_row("T1", "test", 0.35, "RuleA", "LOCSUPR", "LOCSUPR"),
+            _make_row("T1", "test", 0.50, "RuleB", "kANON", "kANON"),
         ]
         df = pd.DataFrame(rows)
-        # Crossover at 0.40 (first value where method != low_method "LOCSUPR")
         xovers = find_crossovers(df)
         assert len(xovers) == 1
-        assert xovers.iloc[0]['observed_crossover'] == 0.40
-        # shift_pp = (0.40 - 0.40) * 100 = 0, not flagged
-        # Let's make a real shift
-        rows[2]['threshold_value'] = 0.50
-        df2 = pd.DataFrame(rows)
-        xovers2 = find_crossovers(df2)
-        assert len(xovers2) == 1
-        assert abs(xovers2.iloc[0]['shift_pp'] - 10) < 0.01  # (0.50 - 0.40) * 100
-        assert "CONSIDER" in xovers2.iloc[0]['recommendation']
+        assert abs(xovers.iloc[0]['shift_pp'] - 10) < 0.01  # (0.50 - 0.40) * 100
+        assert "CONSIDER" in xovers.iloc[0]['recommendation']

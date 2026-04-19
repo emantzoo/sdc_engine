@@ -55,37 +55,54 @@ def run_matrix(
                 outcome.dataset = ds.name
                 all_outcomes.append(outcome)
                 status = "OK" if outcome.target_met else "miss"
-                print(f"{status} method={outcome.selected_method}")
+                print(f"{status} rule={outcome.selected_rule} "
+                      f"initial={outcome.initial_method} -> {outcome.selected_method}")
 
     return pd.DataFrame([o.as_dict() for o in all_outcomes])
 
 
 def find_crossovers(results: pd.DataFrame) -> pd.DataFrame:
     """For each (threshold, dataset), find the value at which the selected
-    method changes and compare to the current threshold.
+    RULE changes (not just the method, since overrides can mask rule changes).
 
     Returns a DataFrame with columns:
         threshold_id, dataset, observed_crossover, current_value,
-        shift_pp, recommendation
+        shift_pp, low_rule, high_rule, low_initial_method, high_initial_method,
+        method_changed, recommendation
     """
     rows = []
     for (tid, ds), group in results.groupby(['threshold_id', 'dataset']):
         if group.empty or group['error'].notna().any():
             continue
         group_sorted = group.sort_values('threshold_value')
+
+        # Check rule-level crossover (primary signal)
+        low_rule = group_sorted.iloc[0]['selected_rule']
+        high_rule = group_sorted.iloc[-1]['selected_rule']
+        has_rule_change = (low_rule != high_rule) and low_rule and high_rule
+
+        # Check method-level crossover (secondary signal)
         low_method = group_sorted.iloc[0]['selected_method']
         high_method = group_sorted.iloc[-1]['selected_method']
-        if low_method == high_method:
+        has_method_change = low_method != high_method
+
+        if not has_rule_change and not has_method_change:
             continue
 
+        # Find crossover point (where rule or method first differs)
+        compare_col = 'selected_rule' if has_rule_change else 'selected_method'
+        low_val = group_sorted.iloc[0][compare_col]
         crossover_row = group_sorted[
-            group_sorted['selected_method'] != low_method
+            group_sorted[compare_col] != low_val
         ].iloc[0]
         observed = crossover_row['threshold_value']
 
         from .thresholds import THRESHOLDS
         current = next((t.current_value for t in THRESHOLDS if t.id == tid), None)
         shift_pp = (observed - current) * 100 if current else 0
+
+        low_initial = group_sorted.iloc[0]['initial_method']
+        high_initial = group_sorted.iloc[-1]['initial_method']
 
         recommendation = ""
         if current is not None and abs(shift_pp) > 5:
@@ -97,6 +114,11 @@ def find_crossovers(results: pd.DataFrame) -> pd.DataFrame:
             'current_value': current,
             'observed_crossover': observed,
             'shift_pp': shift_pp,
+            'low_rule': low_rule,
+            'high_rule': high_rule,
+            'low_initial_method': low_initial,
+            'high_initial_method': high_initial,
+            'method_changed': has_method_change,
             'recommendation': recommendation,
         })
 
@@ -118,18 +140,24 @@ def write_reports(results: pd.DataFrame, out_dir: Path) -> None:
 
         f.write("## Crossovers detected\n\n")
         if crossovers.empty:
-            f.write("_No method crossovers observed in tested ranges._\n\n")
+            f.write("_No crossovers observed in tested ranges._\n\n")
         else:
-            flagged = crossovers[crossovers['recommendation'] != ""]
+            rule_only = crossovers[~crossovers['method_changed']]
+            method_too = crossovers[crossovers['method_changed']]
             f.write(f"Total crossovers: {len(crossovers)}  "
-                    f"(**{len(flagged)} flagged** -- shift > 5 pp)\n\n")
+                    f"(rule-level only: {len(rule_only)}, "
+                    f"method-level: {len(method_too)})\n\n")
+            flagged = crossovers[crossovers['recommendation'] != ""]
+            if len(flagged):
+                f.write(f"**{len(flagged)} flagged** (shift > 5 pp)\n\n")
             f.write(crossovers.to_markdown(index=False))
             f.write("\n\n")
 
         f.write("## Per-threshold summary\n\n")
         for tid, group in results.groupby('threshold_id'):
             f.write(f"### {tid}\n\n")
-            f.write(group[['dataset', 'threshold_value', 'selected_method',
+            f.write(group[['dataset', 'threshold_value', 'selected_rule',
+                          'initial_method', 'selected_method',
                           'reid_after', 'utility_score', 'target_met']]
                     .to_markdown(index=False))
             f.write("\n\n")

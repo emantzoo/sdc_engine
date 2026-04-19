@@ -4,6 +4,7 @@ and return comparable metrics.
 """
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
+import re
 import time
 import pandas as pd
 
@@ -15,6 +16,7 @@ class Outcome:
     threshold_value: float
     selected_method: str
     selected_rule: str
+    initial_method: str          # what the rule selected BEFORE override
     reid_before: float
     reid_after: float
     utility_score: float
@@ -26,6 +28,21 @@ class Outcome:
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+_RULE_RE = re.compile(r"Rule:\s+(\S+)\s+→\s+(\S+)")
+
+
+def _extract_rule_from_log(log_entries: List[str]) -> tuple:
+    """Extract (rule_name, initial_method) from log entries.
+
+    The log contains lines like: 'Rule: MED1_Moderate_Structural → kANON'
+    """
+    for entry in log_entries:
+        m = _RULE_RE.search(entry)
+        if m:
+            return m.group(1), m.group(2)
+    return '', ''
 
 
 def run_outcome(
@@ -56,7 +73,7 @@ def run_outcome(
             protector = SDCProtection(dataset=dataset)
 
             features = build_data_features(df, quasi_identifiers)
-            result, _log = run_rules_engine_protection(
+            result, log_entries = run_rules_engine_protection(
                 input_data=df,
                 quasi_identifiers=quasi_identifiers,
                 data_features=features,
@@ -73,13 +90,15 @@ def run_outcome(
             supp_detail = getattr(result, 'qi_suppression_detail', {}) or {}
             max_supp = max(supp_detail.values()) if supp_detail else 0
 
+            rule_name, initial_method = _extract_rule_from_log(log_entries)
+
             return Outcome(
                 dataset="",  # filled by caller
                 threshold_id=threshold_id,
                 threshold_value=threshold_value,
                 selected_method=result.method or "UNKNOWN",
-                selected_rule=(result.metadata or {}).get('rule_applied', '')
-                              if result.metadata else '',
+                selected_rule=rule_name,
+                initial_method=initial_method,
                 reid_before=reid_before,
                 reid_after=reid_after,
                 utility_score=result.utility_score or 0,
@@ -95,6 +114,7 @@ def run_outcome(
             dataset="", threshold_id=threshold_id,
             threshold_value=threshold_value,
             selected_method="ERROR", selected_rule="",
+            initial_method="",
             reid_before=float('nan'), reid_after=float('nan'),
             utility_score=0, suppression_rate=0,
             n_iterations=0, elapsed_sec=time.monotonic() - start,

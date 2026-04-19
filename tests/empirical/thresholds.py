@@ -59,6 +59,11 @@ def _patch_cat1_ratio(value: float):
 
     Replaces ``categorical_aware_rules`` so CAT1 triggers at
     ``cat_ratio >= value`` instead of ``cat_ratio >= 0.70``.
+
+    IMPORTANT: Cannot delegate to original() because original re-checks
+    the hardcoded 0.70 gate AND the _has_dominant_categories gate.  We
+    build the CAT1 result directly, intentionally removing the
+    dominant-categories check so the threshold is the only variable.
     """
     from sdc_engine.sdc.selection import rules as rules_mod
     original = rules_mod.categorical_aware_rules
@@ -73,13 +78,56 @@ def _patch_cat1_ratio(value: float):
             return {'applies': False}
         cat_ratio = n_cat / total
         reid_95 = features.get('reid_95', 1.0)
+        qis = features['quasi_identifiers']
 
         # CAT1 with variable threshold (replaces 0.70)
+        # Intentionally omits _has_dominant_categories to isolate threshold
         if cat_ratio >= value and 0.15 <= reid_95 <= 0.40:
-            return original(features)
-        # CAT2 is unchanged (0.50 < cat_ratio < value)
+            p = 0.35 if reid_95 > 0.30 else (0.30 if reid_95 > 0.20 else 0.25)
+            from sdc_engine.sdc.selection.rules import top_categorical_qis
+            return {
+                'applies': True,
+                'rule': 'CAT1_Categorical_Dominant',
+                'method': 'PRAM',
+                'parameters': {
+                    'variables': top_categorical_qis(features),
+                    'p_change': p,
+                },
+                'reason': f"Categorical-dominant ({cat_ratio:.0%}) at moderate risk (ReID95={reid_95:.1%})",
+                'confidence': 'MEDIUM',
+                'priority': 'RECOMMENDED',
+                'reid_fallback': {
+                    'method': 'kANON',
+                    'parameters': {'quasi_identifiers': qis, 'k': 5, 'strategy': 'hybrid'},
+                },
+                'utility_fallback': None,
+            }
+
+        # CAT2 unchanged — delegate to original (CAT2 has its own gate)
         if 0.50 < cat_ratio < value and n_cont >= 1 and 0.15 <= reid_95 <= 0.50:
-            return original(features)
+            # Build CAT2 result directly too, to avoid original re-checking CAT1
+            p = 0.30 if reid_95 > 0.35 else 0.25
+            mag = 0.20 if reid_95 > 0.35 else 0.15
+            from sdc_engine.sdc.selection.rules import top_categorical_qis
+            return {
+                'applies': True,
+                'rule': 'CAT2_Mixed_Categorical_Majority',
+                'use_pipeline': True,
+                'pipeline': ['NOISE', 'PRAM'],
+                'parameters': {
+                    'NOISE': {'variables': features['continuous_vars'], 'magnitude': mag},
+                    'PRAM': {'variables': top_categorical_qis(features), 'p_change': p},
+                },
+                'reason': f"Mixed types at moderate risk (ReID95={reid_95:.1%})",
+                'confidence': 'MEDIUM',
+                'priority': 'RECOMMENDED',
+                'reid_fallback': {
+                    'method': 'kANON',
+                    'parameters': {'quasi_identifiers': qis, 'k': 5, 'strategy': 'hybrid'},
+                },
+                'utility_fallback': None,
+            }
+
         return {'applies': False}
 
     with patch.object(rules_mod, "categorical_aware_rules", patched):
@@ -110,12 +158,10 @@ def _patch_qr2_suppression_gate(value: float):
                                features.get('estimated_suppression_k5', 0))
                 qis = features['quasi_identifiers']
                 if est_supp > value:
-                    # Should be LOCSUPR (same as QR2_Heavy_Tail_Low_Suppression)
                     result['rule'] = 'QR2_Heavy_Tail_Low_Suppression'
                     result['method'] = 'LOCSUPR'
                     result['parameters'] = {'quasi_identifiers': qis, 'k': 5}
                 else:
-                    # Should be kANON (same as QR2_Heavy_Tail_Risk)
                     result['rule'] = 'QR2_Heavy_Tail_Risk'
                     result['method'] = 'kANON'
                     from sdc_engine.sdc.selection.rules import _clamp_k_by_suppression
@@ -134,6 +180,10 @@ def _patch_low1_reid_gate(value: float):
 
     Replaces the function so LOW1 triggers at ``reid_95 <= value``
     instead of ``reid_95 <= 0.10``.
+
+    IMPORTANT: Cannot delegate to original() for the fallthrough path
+    because original re-checks its own LOW1 gate.  We re-implement
+    the full LOW1/LOW2/LOW3 logic with only the LOW1 reid gate changed.
     """
     from sdc_engine.sdc.selection import rules as rules_mod
     original = rules_mod.low_risk_rules
@@ -147,19 +197,95 @@ def _patch_low1_reid_gate(value: float):
         if not features.get('has_reid'):
             return {'applies': False}
 
+        qis = features['quasi_identifiers']
         n_cat = features.get('n_categorical', 0)
         n_cont = features.get('n_continuous', 0)
         total = n_cat + n_cont
         if total == 0:
             return {'applies': False}
         cat_ratio = n_cat / total
+        is_very_low = reid_95 <= 0.05
+        has_outliers = features.get('has_outliers', False)
         high_card = features.get('high_cardinality_count', 0)
 
-        # LOW1 with variable reid gate (replaces 0.10)
+        # LOW1 with variable reid gate (replaces hardcoded 0.10)
         if cat_ratio >= 0.60 and high_card == 0 and reid_95 <= value:
-            return original(features)
-        # For LOW2/LOW3 delegate unchanged
-        return original(features)
+            from sdc_engine.sdc.selection.rules import top_categorical_qis
+            p = 0.15 if is_very_low else 0.20
+            return {
+                'applies': True,
+                'rule': 'LOW1_Categorical',
+                'method': 'PRAM',
+                'parameters': {
+                    'variables': top_categorical_qis(features),
+                    'p_change': p,
+                },
+                'reason': f"Low risk (ReID95={reid_95:.1%}), categorical-dominant ({cat_ratio:.0%}) — PRAM",
+                'confidence': 'HIGH',
+                'priority': 'RECOMMENDED',
+                'reid_fallback': {
+                    'method': 'kANON',
+                    'parameters': {'quasi_identifiers': qis, 'k': 3},
+                },
+                'utility_fallback': None,
+            }
+
+        # LOW2/LOW3: delegate to original — LOW1 gate already failed so
+        # original's LOW1 check at reid_95 <= 0.10 doesn't matter (if our
+        # patched gate at `value` failed, the tighter original gate also fails
+        # UNLESS value < 0.10 and reid_95 is between value and 0.10).
+        # To be safe, skip LOW1 in original by going directly to LOW2/LOW3:
+
+        # LOW2: Continuous-dominant
+        if cat_ratio <= 0.40 and n_cont > 0:
+            if is_very_low or (has_outliers and reid_95 <= 0.10):
+                mag = 0.20 if has_outliers else 0.15
+                return {
+                    'applies': True,
+                    'rule': 'LOW2_Continuous_Noise',
+                    'method': 'NOISE',
+                    'parameters': {'variables': features['continuous_vars'], 'magnitude': mag},
+                    'reason': f"Low risk (ReID95={reid_95:.1%}), continuous-dominant — NOISE",
+                    'confidence': 'HIGH',
+                    'priority': 'RECOMMENDED',
+                    'reid_fallback': {
+                        'method': 'kANON',
+                        'parameters': {'quasi_identifiers': qis, 'k': 3},
+                    },
+                    'utility_fallback': None,
+                }
+            k = 3 if is_very_low else 5
+            return {
+                'applies': True,
+                'rule': 'LOW2_Continuous_kANON',
+                'method': 'kANON',
+                'parameters': {'quasi_identifiers': qis, 'k': k, 'strategy': 'generalization'},
+                'reason': f"Low risk (ReID95={reid_95:.1%}), continuous-dominant — kANON",
+                'confidence': 'MEDIUM',
+                'priority': 'RECOMMENDED',
+                'reid_fallback': {
+                    'method': 'kANON',
+                    'parameters': {'quasi_identifiers': qis, 'k': k + 2},
+                },
+                'utility_fallback': None,
+            }
+
+        # LOW3: Mixed or high-cardinality
+        k = 3 if is_very_low else 5
+        return {
+            'applies': True,
+            'rule': 'LOW3_Mixed',
+            'method': 'kANON',
+            'parameters': {'quasi_identifiers': qis, 'k': k, 'strategy': 'hybrid'},
+            'reason': f"Low risk (ReID95={reid_95:.1%}), mixed types — kANON",
+            'confidence': 'MEDIUM',
+            'priority': 'RECOMMENDED',
+            'reid_fallback': {
+                'method': 'kANON',
+                'parameters': {'quasi_identifiers': qis, 'k': k + 2},
+            },
+            'utility_fallback': None,
+        }
 
     with patch.object(rules_mod, "low_risk_rules", patched):
         yield
