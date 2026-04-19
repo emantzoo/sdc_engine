@@ -173,3 +173,7 @@ data/
 
 # Build guide (not needed)
 docs/build_guide.md
+
+# Empirical validation data and reports (user-specific)
+tests/empirical/data/
+tests/empirical/reports/
