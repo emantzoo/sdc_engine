@@ -17,13 +17,9 @@ Available methods (microdata-only):
 - LOCSUPR: Local Suppression for k-anonymity
 
 Usage:
-    from src import apply_kanon, apply_pram, apply_noise, apply_locsupr
-
-    # New modular imports
-    from src.config import get_method_defaults, get_protection_thresholds
-    from src.detection import detect_quasi_identifiers_enhanced, analyze_data
-    from src.metrics import calculate_reid, calculate_utility_metrics
-    from src.selection import select_method_by_features, pipeline_rules
+    from sdc_engine.sdc import apply_kanon, apply_pram, apply_noise, apply_locsupr
+    from sdc_engine.sdc.metrics import calculate_reid, calculate_utility_metrics
+    from sdc_engine.sdc.selection import select_method_by_features
 """
 
 # =============================================================================
@@ -104,6 +100,11 @@ from .sdc_utils import (
     # Method info
     METHOD_INFO,
 )
+
+# =============================================================================
+# Method selection (canonical — from selection.rules)
+# =============================================================================
+from .selection import select_method_by_features
 
 # =============================================================================
 # New modular exports
@@ -194,6 +195,8 @@ __all__ = [
     'apply_geographic_coarsening',
     'apply_string_truncation',
     'apply_record_sampling',
+    # Method selection (canonical)
+    'select_method_by_features',
     # Synthetic data release (optional)
     'HAS_SYNTHCITY',
 ]

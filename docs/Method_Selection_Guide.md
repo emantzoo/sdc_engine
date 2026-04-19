@@ -1,5 +1,9 @@
 # Method Selection Guide
 
+> **Canonical rule specification:** see [docs/smart_rules_complete.md](smart_rules_complete.md).
+> This file provides an overview; specific rule definitions are maintained in
+> `sdc_engine/sdc/selection/rules.py` and `sdc_engine/sdc/selection/pipelines.py`.
+
 This guide covers ReID-based method selection, the reactive pipeline escalation system, and how SDC Engine results inform automatic method recommendation.
 
 ## Overview
@@ -36,7 +40,7 @@ This creates a hard decision boundary:
 IF ReID95 > 5%:
     → MUST use structural method (kANON or LOCSUPR)
     → Perturbation CANNOT fix the problem
-    → Rules QR1-QR8 select the specific structural method
+    → Rules QR0-QR4, MED1, CAT1-CAT2, LOW1-LOW3 select the specific method
 
 IF ReID95 ≤ 5%:
     → Data is already structurally safe
@@ -106,7 +110,7 @@ features = {
 
 suite = select_method_suite(features, access_tier='SCIENTIFIC', verbose=True)
 print(f"Primary: {suite['primary']}")        # e.g., 'kANON'
-print(f"Rule: {suite['rule_applied']}")       # e.g., 'QR5_Moderate_Spread'
+print(f"Rule: {suite['rule']}")                # e.g., 'QR2_Heavy_Tail_Risk'
 print(f"Confidence: {suite['confidence']}")   # 'HIGH', 'MEDIUM', 'LOW'
 print(f"Fallbacks: {[f[0] for f in suite['fallbacks']]}")
 ```
@@ -142,26 +146,37 @@ When no specific goal is provided, the system uses **ReID (Re-identification Ris
 | `moderate` | Moderate overall risk | kANON |
 | `uniform_low` | Uniformly low risk | Default rules |
 
-### ReID Rules (QR0-QR10)
+### Rule Categories
 
-The system uses 12 named rules for method selection based on risk patterns. Rules are evaluated in order — **first match wins**.
+The system uses named rules across multiple categories. Rules are evaluated in priority order — **first match wins**. See [smart_rules_complete.md](smart_rules_complete.md) for full specifications.
 
-| Rule | Pattern | ReID Characteristics | Method |
-|------|---------|---------------------|--------|
-| **QR0_K_Anonymity_Infeasible** | Infeasible | QI combination space > dataset size | **GENERALIZE_FIRST** |
-| **QR1_Severe_Tail_Risk** | Severe tail | ReID_99/ReID_50 > 10x, ReID_99 > 30% | **LOCSUPR (k=5)** |
-| **QR2_Heavy_Tail_Risk** | Tail | ReID_95 > 40% | **kANON (k=7)** |
-| **QR2_Moderate_Tail_Risk** | Tail | ReID_95 30-40%, ReID_50 < 15% | **LOCSUPR (k=3)** |
-| **QR3_Uniform_High_Risk** | Uniform high | ReID_50 > 20% | **kANON (k=10)** |
-| **QR4_Widespread_High** | Widespread | ReID_50 > 15%, ReID_95 > 50% | **kANON (k=10)** |
-| **QR4_Widespread_Moderate** | Widespread | ReID_50 > 15%, ReID_95 ≤ 50% | **kANON (k=7)** |
-| **QR5_Moderate_Spread** | Moderate | ReID_95 > 20%, ReID_50 < 10% | **kANON (k=5)** |
-| **QR6_Bimodal_Risk** | Bimodal | Mean >> Median | **kANON (k=5)** |
-| **QR7_Many_High_Risk** | Many high-risk | >10% records at risk >20% | **kANON (k=5)** |
-| **QR8_Mild_Categorical** | Mild categorical | 5% < ReID_95 ≤ 10%, categorical-only | **PRAM (p=0.20)** |
-| **QR8_Mild_Risk** | Mild | 5% < ReID_95 ≤ 20% | **kANON (k=3 or k=5)** |
-| **QR9_Moderate_Risk_Continuous** | Moderate + continuous | 10% < ReID_95 ≤ 20%, continuous ≥ categorical | **RANKSWAP (p=10, R0=0.95)** |
-| **QR10_Low_Risk_Mixed** | Low risk + mixed | ReID_95 ≤ 10%, mixed variable types | **RECSWAP (swap_rate=0.05)** |
+| Category | Rules | Focus |
+|----------|-------|-------|
+| **Feasibility** | QR0 | K-anonymity feasibility check |
+| **Structural risk** | SR3, HR1-HR6 | Near-unique records, small datasets |
+| **Risk concentration** | RC1-RC4 | Backward elimination risk patterns |
+| **Categorical** | CAT1-CAT2 | Categorical-dominant data |
+| **ReID risk** | QR1-QR4, MED1 | Risk distribution patterns |
+| **Low risk** | LOW1-LOW3 | Already-safe data |
+| **Distribution** | DP1-DP4 | Outliers, skewness, sensitive columns |
+| **Special** | LDIV1, DATE1 | L-diversity, temporal-dominant data |
+| **Default** | DEFAULT_* | Catch-all fallbacks |
+
+### Key ReID Rules
+
+| Rule | Condition | Method |
+|------|-----------|--------|
+| **QR0_K_Anonymity_Infeasible** | QI combination space > dataset size | **GENERALIZE_FIRST** |
+| **QR1_Severe_Tail_Risk** | ReID_99/ReID_50 > 10x, ReID_99 > 30% | **LOCSUPR (k=5)** |
+| **QR2_Heavy_Tail_Risk** | ReID_95 > 40% | **kANON (k=7)** |
+| **QR2_Moderate_Tail_Risk** | ReID_95 30-40%, ReID_50 < 15% | **LOCSUPR (k=3)** |
+| **QR3_Uniform_High_Risk** | ReID_50 > 20% | **kANON (k=10)** |
+| **QR4_Widespread** | ReID_50 > 15%, widespread pattern | **kANON (k=7-10)** |
+| **RC1_Risk_Dominated** | Single QI dominates risk | **LOCSUPR** |
+| **CAT1_Categorical_Dominant** | All QIs categorical, moderate risk | **PRAM** |
+| **LOW1_Categorical** | ReID_95 ≤ 5%, categorical-only | **PRAM (p=0.15)** |
+| **LOW2_Continuous_Noise** | ReID_95 ≤ 5%, continuous-dominant | **NOISE** |
+| **LOW3_Mixed** | ReID_95 ≤ 5%, mixed types | **kANON (k=3)** |
 
 ### K-Anonymity Feasibility Check (QR0)
 
@@ -196,12 +211,15 @@ If expected_eq_size < 3:
 
 Method selection follows this priority order:
 
-1. **Pipeline Rules (P1-P6)** — Multi-method pipelines for complex scenarios
-2. **Data Structure Rules (DS1-DS3)** — Tabular format detection
-3. **ReID Risk Rules (QR0-QR9)** — Risk distribution patterns
-4. **Low-Risk Structure Rules (LR1-LR4)** — Variable types for low-risk data
-5. **Distribution Rules (DP1-DP3)** — Outliers, skewness
-6. **Default Rules** — Final fallbacks
+1. **Feasibility (QR0)** — K-anonymity feasibility check
+2. **Structural risk (SR3, HR1-HR6)** — Near-unique records, small datasets
+3. **Risk concentration (RC1-RC4)** — Backward elimination risk patterns
+4. **Categorical (CAT1-CAT2)** — Categorical-dominant data
+5. **ReID risk (QR1-QR2)** — Severe/heavy tail risk
+6. **Low-risk (LOW1-LOW3)** — Already-safe data, perturbation for utility
+7. **Distribution (DP1-DP4)** — Outliers, skewness, sensitive columns
+8. **Special (LDIV1, DATE1)** — L-diversity, temporal-dominant
+9. **Default rules** — Final fallbacks
 
 ## Pipeline Rules (P1-P6)
 
@@ -263,7 +281,7 @@ suite = select_method_suite(features, access_tier='PUBLIC')
 # - utility_fallback: Weaker method if utility target not met
 # - fallbacks: List of [(method, params), ...] ordered by priority
 # - pipeline: Multi-method pipeline if needed
-# - rule_applied: Which rule triggered (e.g., 'QR5_Moderate_Spread')
+# - rule: Which rule triggered (e.g., 'QR2_Heavy_Tail_Risk')
 # - confidence: 'HIGH', 'MEDIUM', 'LOW'
 # - reason: Human-readable explanation
 # - use_pipeline: bool — whether multi-method pipeline is recommended
