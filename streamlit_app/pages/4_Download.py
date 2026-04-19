@@ -435,6 +435,8 @@ st.divider()
 
 # ── Start over ────────────────────────────────────────────────────────
 if st.button("Start Over"):
+    preserve = {"cerebras_api_key", "use_sdcmicro_r"}
     for key in list(st.session_state.keys()):
-        del st.session_state[key]
+        if key not in preserve:
+            del st.session_state[key]
     st.rerun()

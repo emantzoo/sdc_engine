@@ -1054,9 +1054,9 @@ def calculate_uniqueness_rate(data: pd.DataFrame, columns: List[str]) -> float:
     float : Proportion of unique records (0.0 to 1.0)
     """
     
-    if not columns:
+    if not columns or len(data) == 0:
         return 0.0
-    
+
     # Count occurrences of each combination
     combo_counts = data.groupby(columns).size()
     
@@ -1069,83 +1069,8 @@ def calculate_uniqueness_rate(data: pd.DataFrame, columns: List[str]) -> float:
     return uniqueness_rate
 
 
-def calculate_reid(
-    data: pd.DataFrame,
-    quasi_identifiers: List[str],
-    quantiles: List[float] = None
-) -> Dict:
-    """
-    Calculate Re-Identification Risk (ReID) - risk distribution across records.
-
-    ReID provides a more nuanced view of re-identification risk by showing
-    what percentage of records fall below various risk thresholds.
-
-    Parameters:
-    -----------
-    data : pd.DataFrame
-        Input dataset
-    quasi_identifiers : list of str
-        Columns used to assess re-identification risk
-    quantiles : list of float, optional
-        Quantiles to calculate (default: [0.5, 0.9, 0.95, 0.99])
-
-    Returns:
-    --------
-    dict : ReID metrics including:
-        - reid_50: Median risk (50% of records have risk <= this)
-        - reid_90: 90th percentile risk
-        - reid_95: 95th percentile risk
-        - reid_99: 99th percentile risk
-        - max_risk: Maximum individual risk
-        - mean_risk: Average risk across all records
-        - high_risk_count: Number of records with risk > 0.2 (20%)
-        - risk_distribution: Full risk series (optional)
-
-    Example:
-    --------
-    >>> reid = calculate_reid(data, ['age', 'gender', 'region'])
-    >>> print(f"95% of records have risk <= {reid['reid_95']:.1%}")
-    95% of records have risk <= 10.0%
-    """
-    if quantiles is None:
-        quantiles = [0.5, 0.9, 0.95, 0.99]
-
-    if not quasi_identifiers:
-        return {
-            'reid_50': 0.0, 'reid_90': 0.0, 'reid_95': 0.0, 'reid_99': 0.0,
-            'max_risk': 0.0, 'mean_risk': 0.0, 'high_risk_count': 0
-        }
-
-    # Filter to rows without NaN in quasi-identifiers (suppressed cells)
-    valid_data = data.dropna(subset=quasi_identifiers)
-
-    if len(valid_data) == 0:
-        # All records have suppressed QIs - return zero risk (fully protected)
-        return {
-            'reid_50': 0.0, 'reid_90': 0.0, 'reid_95': 0.0, 'reid_99': 0.0,
-            'max_risk': 0.0, 'mean_risk': 0.0, 'high_risk_count': 0,
-            'high_risk_rate': 0.0, 'suppressed_records': len(data)
-        }
-
-    # Calculate group sizes for each record
-    group_sizes = valid_data.groupby(quasi_identifiers, observed=True).transform('size')
-
-    # Individual risk = 1 / group_size (probability of re-identification)
-    individual_risk = 1 / group_sizes
-
-    # Calculate quantiles
-    result = {}
-    for q in quantiles:
-        key = f'reid_{int(q * 100)}'
-        result[key] = float(individual_risk.quantile(q))
-
-    # Additional summary statistics
-    result['max_risk'] = float(individual_risk.max())
-    result['mean_risk'] = float(individual_risk.mean())
-    result['high_risk_count'] = int((individual_risk > 0.2).sum())
-    result['high_risk_rate'] = float((individual_risk > 0.2).mean())
-
-    return result
+# Re-export from the canonical implementation in metrics.reid
+from sdc_engine.sdc.metrics.reid import calculate_reid  # noqa: F811
 
 
 def assess_risk_with_reid(
