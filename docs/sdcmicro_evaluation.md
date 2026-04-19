@@ -18,11 +18,13 @@ Tanzania household survey -- small, categorical-heavy, typical sdcMicro tutorial
 | QIs (6) | roof, walls, water, electcon, relat, sex |
 | Sensitive | income |
 | Method selected | `LOCSUPR` |
-| Rule applied | `HR3_High_Uniqueness_QIs` |
+| Rule applied | `RC1_Risk_Dominated` |
 | ReID95 before | 33.33% |
-| ReID95 after | 5.00% |
+| ReID95 after | 3.33% |
 | Utility | 100.0% |
 | Target met | Yes |
+
+**Why this rule?** One QI (`relat`) contributes 70% of re-identification risk -- targeted suppression is more efficient than global k-anonymity.
 
 ## CASCrefmicrodata
 
@@ -40,6 +42,8 @@ US Census CASC reference microdata -- medium size, all-continuous.
 | Utility | 99.3% |
 | Target met | Yes |
 
+**Why this rule?** All-continuous QIs with outliers; every record is unique. Noise addition preserves distributions while reducing disclosure risk.
+
 ## francdat
 
 Franconi synthetic -- standard SDC benchmark, all-categorical QIs.
@@ -56,6 +60,8 @@ Franconi synthetic -- standard SDC benchmark, all-categorical QIs.
 | Utility | 100.0% |
 | Target met | Yes |
 
+**Why this rule?** Only 8 records -- below the small-dataset threshold. Aggressive structural methods would over-suppress at this scale.
+
 ## free1
 
 Free1 survey -- 4000 records, mixed categorical/continuous QIs.
@@ -66,9 +72,11 @@ Free1 survey -- 4000 records, mixed categorical/continuous QIs.
 | QIs (4) | SEX, MARSTAT, EDUC1, AGE |
 | Sensitive | INCOME |
 | Method selected | `kANON` |
-| Rule applied | `HR1_Extreme_Uniqueness` |
+| Rule applied | `RC1_Risk_Dominated` |
 | ReID95 before | 100.00% |
 | ReID95 after | 12.50% |
 | Utility | 100.0% |
 | Target met | Yes |
+
+**Why this rule?** One QI (`AGE`) contributes 96% of re-identification risk -- targeted suppression is more efficient than global k-anonymity.
 

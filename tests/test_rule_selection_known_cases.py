@@ -48,6 +48,7 @@ from tests.fixtures.rule_test_builders import (
     build_sec1_continuous_dataset,
     build_reg1_high_risk_dataset,
     build_reg1_moderate_risk_dataset,
+    build_small_dominated_dataset,
 )
 
 
@@ -541,3 +542,49 @@ class TestDefaultFallback:
         suite, features = get_suite(df, qis)
         for key in ('rule_applied', 'primary', 'confidence'):
             assert key in suite, f"Suite missing required key: {key}"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Dormant-rule activation (Spec 07): RC rules via organic var_priority
+# ════════════════════════════════════════════════════════════════════════
+
+def _get_suite_with_var_priority(df, qis):
+    """Build features via build_data_features (includes lazy var_priority)."""
+    from sdc_engine.sdc.protection_engine import build_data_features
+    features = build_data_features(df, qis)
+    return select_method_suite(features, access_tier='standard', verbose=False), features
+
+
+class TestDormantRulesNowActive:
+    """Verify RC rules fire organically after var_priority is populated.
+
+    Before Spec 07: these tests would fire DEFAULT/QR.
+    After Spec 07: RC rules fire naturally on small datasets.
+    """
+
+    def test_rc1_fires_organically_on_dominated_data(self):
+        """Small dataset with one dominant QI -> RC1 via lazy computation."""
+        df, qis, _ = build_small_dominated_dataset()
+        suite, features = _get_suite_with_var_priority(df, qis)
+        assert 'RC1' in suite['rule_applied'], \
+            f"Expected RC1, got {suite['rule_applied']}"
+        assert suite['primary'] == 'LOCSUPR'
+
+    def test_rc_rules_skipped_on_large_dataset(self):
+        """Large dataset should NOT compute var_priority (perf guard)."""
+        import pandas as pd
+        df, qis, _ = build_small_dominated_dataset()
+        df_large = pd.concat([df] * 20, ignore_index=True)  # 12000 rows
+        suite, features = _get_suite_with_var_priority(df_large, qis)
+        assert 'RC' not in suite['rule_applied'], \
+            f"RC rule fired on large data — perf guard failed: {suite['rule_applied']}"
+
+    def test_var_priority_populated_for_small_data(self):
+        """Directly verify var_priority is in features dict for small data."""
+        from sdc_engine.sdc.protection_engine import build_data_features
+        df, qis, _ = build_small_dominated_dataset()
+        features = build_data_features(df, qis)
+        assert features.get('var_priority'), \
+            "var_priority should be populated for small dataset"
+        assert 'risk_concentration' in features, \
+            "risk_concentration should be classified"

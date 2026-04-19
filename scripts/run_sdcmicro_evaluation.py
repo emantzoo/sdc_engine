@@ -130,6 +130,9 @@ def run_one(spec: dict) -> dict:
             rule_applied = entry.split('Rule:')[1].split('\u2192')[0].strip()
             break
 
+    # Build rationale from var_priority and rule
+    rationale = _build_rationale(rule_applied, features, len(df), qis)
+
     return {
         "dataset": spec["dataset"],
         "description": spec["description"],
@@ -139,11 +142,49 @@ def run_one(spec: dict) -> dict:
         "sensitive": sens,
         "method_selected": getattr(result, 'method', meta.get('method', '?')),
         "rule_applied": rule_applied,
+        "rationale": rationale,
         "reid_before": reid_before,
         "reid_after": reid_after,
         "utility": result.utility_score or 0,
         "target_met": bool(result.success),
     }
+
+
+def _build_rationale(rule_applied, features, n_records, qis):
+    """One-sentence explanation of why this rule was selected."""
+    var_priority = features.get('var_priority', {})
+
+    if 'RC1' in rule_applied and var_priority:
+        # Find the dominant QI
+        top_qi = max(var_priority, key=lambda k: var_priority[k][1])
+        top_pct = var_priority[top_qi][1]
+        return (f"One QI (`{top_qi}`) contributes {top_pct:.0f}% of re-identification "
+                f"risk -- targeted suppression is more efficient than global k-anonymity.")
+
+    if 'RC2' in rule_applied:
+        return "Risk is concentrated in 2 QIs -- targeted treatment outperforms global methods."
+
+    if 'DP1' in rule_applied:
+        return ("All-continuous QIs with outliers; every record is unique. "
+                "Noise addition preserves distributions while reducing disclosure risk.")
+
+    if 'HR6' in rule_applied:
+        return (f"Only {n_records} records -- below the small-dataset threshold. "
+                f"Aggressive structural methods would over-suppress at this scale.")
+
+    if 'HR1' in rule_applied:
+        return "Near-total uniqueness across QI combinations -- aggressive protection required."
+
+    if 'HR3' in rule_applied:
+        return "High uniqueness rate among QI combinations -- structural suppression needed."
+
+    if 'LOW' in rule_applied:
+        return "Low re-identification risk -- lightweight perturbation sufficient."
+
+    if 'QR' in rule_applied:
+        return "Risk distribution pattern drives method selection via ReID percentile analysis."
+
+    return ""
 
 
 def write_report(results: list, out_path: Path):
@@ -176,6 +217,8 @@ def write_report(results: list, out_path: Path):
             f.write(f"| ReID95 after | {r['reid_after']:.2%} |\n")
             f.write(f"| Utility | {r['utility']:.1%} |\n")
             f.write(f"| Target met | {'Yes' if r['target_met'] else 'No'} |\n")
+            if r.get('rationale'):
+                f.write(f"\n**Why this rule?** {r['rationale']}\n")
             f.write(f"\n")
 
 

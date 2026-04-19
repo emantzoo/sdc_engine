@@ -1151,3 +1151,17 @@ HIERARCHY_DEFAULTS: Dict[str, Any] = {
     'categorical_min_frequency': 0.01,
     'auto_build': True,  # auto-build hierarchies when none provided
 }
+
+# =============================================================================
+# FEATURE PIPELINE PERFORMANCE GUARDS
+# =============================================================================
+
+VAR_PRIORITY_COMPUTATION: Dict[str, Any] = {
+    'enabled': True,
+    # Skip backward elimination for datasets larger than this
+    'max_n_records': 10_000,
+    # Skip if QI count exceeds this (combinatorial growth)
+    'max_n_qis': 8,
+    # Timeout for the computation — bail gracefully if it exceeds
+    'timeout_seconds': 10.0,
+}
