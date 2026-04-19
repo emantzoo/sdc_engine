@@ -390,6 +390,30 @@ def build_reg1_moderate_risk_dataset() -> Tuple[pd.DataFrame, List[str], List[st
 
 
 # ════════════════════════════════════════════════════════════════════════
+# Dormant-rule activation (Spec 07): RC rules via organic var_priority
+# ════════════════════════════════════════════════════════════════════════
+
+def build_small_dominated_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
+    """Small dataset where one QI clearly dominates risk contribution.
+
+    Designed for Spec 07 integration tests: n < max_n_records,
+    n_qis <= max_n_qis, and one QI's cardinality is 10x+ the others
+    so it dominates backward-elimination risk.
+
+    Verified: var_priority populated, risk_concentration
+    pattern='dominated', top_qi='job', top_pct > 40%.
+    """
+    rng = _rng()
+    n = 600  # well under max_n_records=10000
+    df = pd.DataFrame({
+        'sex': rng.choice(['M', 'F'], n),
+        'region': rng.choice(['N', 'S', 'E'], n),
+        'job': rng.choice([f'j_{i}' for i in range(60)], n),  # dominant
+    })
+    return df, ['sex', 'region', 'job'], []
+
+
+# ════════════════════════════════════════════════════════════════════════
 # Edge cases
 # ════════════════════════════════════════════════════════════════════════
 

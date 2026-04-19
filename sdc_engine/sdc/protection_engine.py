@@ -242,6 +242,11 @@ def build_data_features(
         except Exception as exc:
             log.warning("[Features] High-risk rate calculation failed: %s", exc)
 
+    # Lazily compute var_priority for small-to-medium datasets.
+    # RC rules become reachable when this is populated.
+    if not var_priority and reid_95 > 0:
+        var_priority = _compute_var_priority(data, quasi_identifiers, reid_95)
+
     log.info("[Features] n_records=%d  n_qis=%d  continuous=%d  categorical=%d  "
              "ReID: 50=%.4f 95=%.4f 99=%.4f  pattern=%s  feasibility=%s(k=%d)  "
              "uniqueness=%.2f%%  outliers=%s  high_card_qis=%s",
@@ -292,6 +297,79 @@ def build_data_features(
         '_risk_metric_type': mt.value,
         '_risk_assessment': risk_assessment,
     }
+
+
+def _compute_var_priority(
+    data: pd.DataFrame,
+    quasi_identifiers: List[str],
+    reid_95_baseline: float,
+) -> Optional[Dict[str, Any]]:
+    """Compute per-QI risk contribution via leave-one-out reid_95.
+
+    Returns a dict ``{qi_name: ('HIGH'|'MEDIUM'|'LOW', contribution_pct)}``
+    matching the shape expected by ``classify_risk_concentration()``.
+    Returns None if the dataset exceeds performance thresholds or fails.
+    """
+    from sdc_engine.sdc.config import VAR_PRIORITY_COMPUTATION
+    cfg = VAR_PRIORITY_COMPUTATION
+
+    if not cfg.get('enabled', True):
+        return None
+
+    n = len(data)
+    n_qis = len(quasi_identifiers)
+
+    if n > cfg['max_n_records']:
+        log.debug("[var_priority] Skipping: n=%d > max_n_records=%d",
+                  n, cfg['max_n_records'])
+        return None
+    if n_qis > cfg['max_n_qis']:
+        log.debug("[var_priority] Skipping: n_qis=%d > max_n_qis=%d",
+                  n_qis, cfg['max_n_qis'])
+        return None
+
+    if reid_95_baseline is None or reid_95_baseline <= 0:
+        return None
+
+    import time as _time
+    start = _time.monotonic()
+    timeout = cfg['timeout_seconds']
+
+    try:
+        from sdc_engine.sdc.metrics.reid import calculate_reid
+
+        contributions = {}
+        for qi in quasi_identifiers:
+            if _time.monotonic() - start > timeout:
+                log.warning("[var_priority] Timeout after %.1fs — returning partial",
+                            timeout)
+                return contributions if contributions else None
+
+            remaining_qis = [q for q in quasi_identifiers if q != qi]
+            if not remaining_qis:
+                contributions[qi] = ('HIGH', 100.0)
+                continue
+
+            reid_without = calculate_reid(data, remaining_qis).get('reid_95', 0)
+            drop = max(0, reid_95_baseline - reid_without)
+            contrib_pct = round((drop / reid_95_baseline) * 100, 1)
+
+            if contrib_pct >= 30:
+                label = 'HIGH'
+            elif contrib_pct >= 15:
+                label = 'MEDIUM'
+            else:
+                label = 'LOW'
+            contributions[qi] = (label, contrib_pct)
+
+        elapsed = _time.monotonic() - start
+        log.info("[var_priority] Computed in %.2fs for n=%d, n_qis=%d: %s",
+                 elapsed, n, n_qis, contributions)
+        return contributions
+
+    except Exception as exc:
+        log.warning("[var_priority] Computation failed: %s", exc)
+        return None
 
 
 def _classify_risk_conc(var_priority):
