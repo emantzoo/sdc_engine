@@ -33,7 +33,8 @@ class PdDataset(BaseDataset):
         
 
     def get_data(self) -> pd.DataFrame:
-        return self.data[self.activeCols]
+        cols = self.activeCols if self.activeCols is not None else list(self.data.columns)
+        return self.data[cols]
     
     
     def no_of_rows(self)->int:
