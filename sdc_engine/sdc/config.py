@@ -754,6 +754,32 @@ METRIC_ALLOWED_METHODS: Dict[str, List[str]] = {
 }
 
 
+# =============================================================================
+# PERTURBATIVE CHALLENGE (post-structural-success retry with PRAM)
+# =============================================================================
+
+PERTURBATIVE_CHALLENGE: Dict[str, Any] = {
+    'enabled': True,
+    # Minimum categorical ratio to attempt challenge (at least this fraction
+    # of QIs must be categorical for PRAM to be viable)
+    'min_cat_ratio': 0.50,
+    # Maximum reid_95 at which we bother challenging — above this, PRAM
+    # is unlikely to hit target on its own
+    'max_reid_95': 0.30,
+    # Minimum QI suppression in the structural result that triggers the
+    # challenge (no point trying PRAM if structural wasn't destructive)
+    'min_structural_suppression': 0.03,
+    # Minimum utility improvement (absolute percentage points) required
+    # to accept the PRAM result over the structural result
+    'min_utility_gain': 0.03,
+    # PRAM p_change to use for the challenge, scaled by reid_95
+    # p = base_p + reid_95 * scale, capped at max_p
+    'base_p': 0.15,
+    'scale_p': 0.30,
+    'max_p': 0.35,
+}
+
+
 def _normalize_metric_key(risk_metric: str) -> str:
     """Normalize risk metric key."""
     return risk_metric
