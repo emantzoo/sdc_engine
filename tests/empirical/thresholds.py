@@ -1,0 +1,201 @@
+"""
+Threshold definitions -- what to vary and where.
+
+Each ThresholdTest describes one threshold, a function to patch it
+temporarily, and the values to test.
+"""
+from dataclasses import dataclass
+from typing import Callable, List, Any
+from contextlib import contextmanager
+from unittest.mock import patch
+
+
+@dataclass
+class ThresholdTest:
+    id: str
+    name: str
+    current_value: float
+    test_values: List[float]
+    description: str
+    # Function that takes a value and returns a context manager
+    # that monkey-patches the threshold in the rules module
+    patcher: Callable[[float], Any]
+
+
+@contextmanager
+def _patch_rc1_dominated(value: float):
+    """Patch RC1's 0.40 cutoff in classify_risk_concentration.
+
+    The threshold is ``top_pct >= 40`` (where top_pct is already a
+    percentage 0-100).  We replace the function so ``dominated`` triggers
+    at ``top_pct >= value * 100``.
+    """
+    from sdc_engine.sdc.selection import features as feat_mod
+    original = feat_mod.classify_risk_concentration
+
+    def patched(var_priority=None):
+        result = original(var_priority)
+        top_pct = result.get("top_pct", 0)
+        top2_pct = result.get("top2_pct", 0)
+        n_high = result.get("n_high_risk", 0)
+        # Re-classify with the variable cutoff (value is 0-1 fraction)
+        if top_pct >= value * 100:
+            result["pattern"] = "dominated"
+        elif top2_pct >= 60:
+            result["pattern"] = "concentrated"
+        elif n_high >= 3:
+            result["pattern"] = "spread_high"
+        else:
+            result["pattern"] = "balanced"
+        return result
+
+    with patch.object(feat_mod, "classify_risk_concentration", patched):
+        yield
+
+
+@contextmanager
+def _patch_cat1_ratio(value: float):
+    """Patch CAT1's 0.70 categorical ratio threshold.
+
+    Replaces ``categorical_aware_rules`` so CAT1 triggers at
+    ``cat_ratio >= value`` instead of ``cat_ratio >= 0.70``.
+    """
+    from sdc_engine.sdc.selection import rules as rules_mod
+    original = rules_mod.categorical_aware_rules
+
+    def patched(features):
+        if not features.get('has_reid'):
+            return {'applies': False}
+        n_cat = features.get('n_categorical', 0)
+        n_cont = features.get('n_continuous', 0)
+        total = n_cat + n_cont
+        if total == 0:
+            return {'applies': False}
+        cat_ratio = n_cat / total
+        reid_95 = features.get('reid_95', 1.0)
+
+        # CAT1 with variable threshold (replaces 0.70)
+        if cat_ratio >= value and 0.15 <= reid_95 <= 0.40:
+            return original(features)
+        # CAT2 is unchanged (0.50 < cat_ratio < value)
+        if 0.50 < cat_ratio < value and n_cont >= 1 and 0.15 <= reid_95 <= 0.50:
+            return original(features)
+        return {'applies': False}
+
+    with patch.object(rules_mod, "categorical_aware_rules", patched):
+        yield
+
+
+@contextmanager
+def _patch_qr2_suppression_gate(value: float):
+    """Patch QR2's 0.25 suppression gate in reid_risk_rules.
+
+    The original condition is ``est_supp > 0.25`` inside the
+    ``reid_95 > 0.40`` branch of QR2.  We replace the whole rule
+    function so the gate triggers at ``est_supp > value``.
+    """
+    from sdc_engine.sdc.selection import rules as rules_mod
+    original = rules_mod.reid_risk_rules
+
+    def patched(features):
+        result = original(features)
+        if not result.get('applies'):
+            return result
+        rule = result.get('rule', '')
+        # Only intercept QR2 heavy-tail decisions
+        if rule in ('QR2_Heavy_Tail_Risk', 'QR2_Heavy_Tail_Low_Suppression'):
+            reid_95 = features.get('reid_95', 0)
+            if reid_95 > 0.40:
+                est_supp = features.get('estimated_suppression', {}).get(7,
+                               features.get('estimated_suppression_k5', 0))
+                qis = features['quasi_identifiers']
+                if est_supp > value:
+                    # Should be LOCSUPR (same as QR2_Heavy_Tail_Low_Suppression)
+                    result['rule'] = 'QR2_Heavy_Tail_Low_Suppression'
+                    result['method'] = 'LOCSUPR'
+                    result['parameters'] = {'quasi_identifiers': qis, 'k': 5}
+                else:
+                    # Should be kANON (same as QR2_Heavy_Tail_Risk)
+                    result['rule'] = 'QR2_Heavy_Tail_Risk'
+                    result['method'] = 'kANON'
+                    from sdc_engine.sdc.selection.rules import _clamp_k_by_suppression
+                    k = _clamp_k_by_suppression(features, 7)
+                    result['parameters'] = {'quasi_identifiers': qis, 'k': k,
+                                            'strategy': 'hybrid'}
+        return result
+
+    with patch.object(rules_mod, "reid_risk_rules", patched):
+        yield
+
+
+@contextmanager
+def _patch_low1_reid_gate(value: float):
+    """Patch LOW1's ``reid_95 <= 0.10`` gate in low_risk_rules.
+
+    Replaces the function so LOW1 triggers at ``reid_95 <= value``
+    instead of ``reid_95 <= 0.10``.
+    """
+    from sdc_engine.sdc.selection import rules as rules_mod
+    original = rules_mod.low_risk_rules
+
+    def patched(features):
+        if features.get('data_type') != 'microdata':
+            return {'applies': False}
+        reid_95 = features.get('reid_95', 1.0)
+        if features.get('has_reid') and reid_95 > 0.20:
+            return {'applies': False}
+        if not features.get('has_reid'):
+            return {'applies': False}
+
+        n_cat = features.get('n_categorical', 0)
+        n_cont = features.get('n_continuous', 0)
+        total = n_cat + n_cont
+        if total == 0:
+            return {'applies': False}
+        cat_ratio = n_cat / total
+        high_card = features.get('high_cardinality_count', 0)
+
+        # LOW1 with variable reid gate (replaces 0.10)
+        if cat_ratio >= 0.60 and high_card == 0 and reid_95 <= value:
+            return original(features)
+        # For LOW2/LOW3 delegate unchanged
+        return original(features)
+
+    with patch.object(rules_mod, "low_risk_rules", patched):
+        yield
+
+
+THRESHOLDS: List[ThresholdTest] = [
+    ThresholdTest(
+        id="T1",
+        name="RC1 dominated cutoff",
+        current_value=0.40,
+        test_values=[0.30, 0.35, 0.40, 0.45, 0.50],
+        description="Top-QI contribution required to route to LOCSUPR via RC1.",
+        patcher=_patch_rc1_dominated,
+    ),
+    ThresholdTest(
+        id="T2",
+        name="CAT1 categorical ratio",
+        current_value=0.70,
+        test_values=[0.60, 0.65, 0.70, 0.75, 0.80],
+        description="Categorical ratio required for CAT1 -> PRAM.",
+        patcher=_patch_cat1_ratio,
+    ),
+    ThresholdTest(
+        id="T3",
+        name="QR2 suppression gate",
+        current_value=0.25,
+        test_values=[0.15, 0.20, 0.25, 0.30, 0.35],
+        description="Estimated suppression at which QR2 switches from kANON to LOCSUPR.",
+        patcher=_patch_qr2_suppression_gate,
+    ),
+    ThresholdTest(
+        id="T4",
+        name="LOW1 reid_95 gate",
+        current_value=0.10,
+        test_values=[0.05, 0.075, 0.10, 0.125, 0.15],
+        description="reid_95 ceiling for LOW1 -> PRAM.",
+        patcher=_patch_low1_reid_gate,
+    ),
+]
