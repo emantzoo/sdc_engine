@@ -143,6 +143,15 @@ def build_data_features(
     if n_rows > 0 and qi_cardinalities:
         max_qi_uniqueness = max(nu / n_rows for nu in qi_cardinalities.values())
 
+    # Integer-coded QIs (for DP4: numeric cols with ≤15 unique integer values)
+    integer_coded_qis = []
+    for qi in quasi_identifiers:
+        if qi in data.columns and qi_cardinalities.get(qi, 0) <= 15:
+            if pd.api.types.is_numeric_dtype(data[qi]):
+                non_null = data[qi].dropna()
+                if len(non_null) > 0 and (non_null == non_null.astype(int)).all():
+                    integer_coded_qis.append(qi)
+
     # Per-QI max category frequency (for categorical-aware rule selection)
     qi_max_cat_freq = {}
     for qi in quasi_identifiers:
@@ -281,6 +290,7 @@ def build_data_features(
         'max_achievable_k': max_k,
         'recommended_qi_to_remove': None,
         'max_qi_uniqueness': max_qi_uniqueness,
+        'integer_coded_qis': integer_coded_qis,
         'uniqueness_rate': uniqueness,
         'has_outliers': has_outliers,
         'skewed_columns': skewed_cols,
