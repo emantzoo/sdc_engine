@@ -5,6 +5,20 @@
 
 ---
 
+## Pre-Phase-1.2 Baseline
+
+**242 pass / 8 fail.** The 8 failures in `test_cross_metric.py` are regressions
+from commit `aa1f943` (Spec 12 PRAM-gating fix, 2026-04-20), not from Spec 18
+or Spec 19. Tests need updating to match new PRAM-gating behavior; tracked
+separately. Affected tests: `TestMethodSuiteMetricFiltering` (5 tests) and
+`TestHighRiskForcesStructural` (3 tests).
+
+**Follow-up task (not in Spec 19):** Update the 8 tests in
+`test_cross_metric.py` to match PRAM-gating behavior from `aa1f943`. Low
+priority, isolated to test file. Candidate for Spec 20 or cleanup batch.
+
+---
+
 ## Check A — `mean_risk` consumer audit
 
 **Result:** `mean_risk` is NOT consumed by any rule.

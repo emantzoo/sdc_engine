@@ -138,6 +138,11 @@ def build_data_features(
             elif rel < 0.1:
                 low_card_qis.append(qi)
 
+    # Max QI uniqueness (for SR3: near-unique QI detection)
+    max_qi_uniqueness = 0.0
+    if n_rows > 0 and qi_cardinalities:
+        max_qi_uniqueness = max(nu / n_rows for nu in qi_cardinalities.values())
+
     # Per-QI max category frequency (for categorical-aware rule selection)
     qi_max_cat_freq = {}
     for qi in quasi_identifiers:
@@ -275,6 +280,7 @@ def build_data_features(
         'k_anonymity_feasibility': feasibility,
         'max_achievable_k': max_k,
         'recommended_qi_to_remove': None,
+        'max_qi_uniqueness': max_qi_uniqueness,
         'uniqueness_rate': uniqueness,
         'has_outliers': has_outliers,
         'skewed_columns': skewed_cols,
