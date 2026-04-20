@@ -462,7 +462,7 @@ def apply_noise(
         if relative:
             # Scale relative to variable's standard deviation
             var_std = original.std()
-            if var_std == 0:
+            if var_std == 0 or np.isnan(var_std):
                 if verbose:
                     print(f"Skipping '{var}': zero variance")
                 continue

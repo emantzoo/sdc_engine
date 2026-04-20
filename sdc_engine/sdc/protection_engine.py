@@ -91,7 +91,8 @@ def build_data_features(
                 sensitive_columns=sensitive_columns)
             risk_assessment = assessment
             reid = risk_to_reid_compat(assessment)
-        except Exception:
+        except (ValueError, TypeError, KeyError) as exc:
+            log.warning("[Protection] Risk computation failed: %s", exc)
             reid = {}
 
     # Coerce object-dtype columns that Configure classified as numeric
@@ -203,7 +204,8 @@ def build_data_features(
             try:
                 unique_combos = data[qi_in_df].drop_duplicates().shape[0]
                 uniqueness = unique_combos / n_rows
-            except Exception:
+            except (ValueError, TypeError, KeyError) as exc:
+                log.warning("[Features] Uniqueness calculation failed: %s", exc)
                 uniqueness = 0
         else:
             uniqueness = 0
@@ -306,7 +308,7 @@ def _compute_var_priority(
 ) -> Optional[Dict[str, Any]]:
     """Compute per-QI risk contribution via leave-one-out reid_95.
 
-    Returns a dict ``{qi_name: ('HIGH'|'MEDIUM'|'LOW', contribution_pct)}``
+    Returns a dict ``{qi_name: ('HIGH'|'MED-HIGH'|'MODERATE'|'LOW', contribution_pct)}``
     matching the shape expected by ``classify_risk_concentration()``.
     Returns None if the dataset exceeds performance thresholds or fails.
     """
@@ -331,6 +333,9 @@ def _compute_var_priority(
     if reid_95_baseline is None or reid_95_baseline <= 0:
         return None
 
+    if n_qis <= 1:
+        return None  # Not enough QIs for meaningful backward elimination
+
     import time as _time
     start = _time.monotonic()
     timeout = cfg['timeout_seconds']
@@ -341,9 +346,9 @@ def _compute_var_priority(
         contributions = {}
         for qi in quasi_identifiers:
             if _time.monotonic() - start > timeout:
-                log.warning("[var_priority] Timeout after %.1fs — returning partial",
-                            timeout)
-                return contributions if contributions else None
+                log.warning("[var_priority] Timeout after %.1fs — returning None "
+                            "(partial=%d/%d QIs)", timeout, len(contributions), n_qis)
+                return None
 
             remaining_qis = [q for q in quasi_identifiers if q != qi]
             if not remaining_qis:
@@ -354,10 +359,12 @@ def _compute_var_priority(
             drop = max(0, reid_95_baseline - reid_without)
             contrib_pct = round((drop / reid_95_baseline) * 100, 1)
 
-            if contrib_pct >= 30:
+            if contrib_pct >= 15:
                 label = 'HIGH'
-            elif contrib_pct >= 15:
-                label = 'MEDIUM'
+            elif contrib_pct >= 8:
+                label = 'MED-HIGH'
+            elif contrib_pct >= 3:
+                label = 'MODERATE'
             else:
                 label = 'LOW'
             contributions[qi] = (label, contrib_pct)
@@ -367,7 +374,7 @@ def _compute_var_priority(
                  elapsed, n, n_qis, contributions)
         return contributions
 
-    except Exception as exc:
+    except (ValueError, KeyError, TypeError, pd.errors.EmptyDataError) as exc:
         log.warning("[var_priority] Computation failed: %s", exc)
         return None
 
@@ -377,7 +384,8 @@ def _classify_risk_conc(var_priority):
     try:
         from sdc_engine.sdc.selection.features import classify_risk_concentration
         return classify_risk_concentration(var_priority)
-    except Exception:
+    except Exception as e:
+        log.warning("[classify_risk_conc] Failed: %s", e)
         return {'pattern': 'unknown', 'top_qi': None, 'top_pct': 0,
                 'top2_pct': 0, 'n_high_risk': 0}
 
@@ -845,7 +853,8 @@ def _step_down_k(
                 _k_check = check_kanonymity(
                     stepped_result.protected_data, quasi_identifiers, k=target_k)
                 stepped_min_k = _k_check[1]['count'].min() if len(_k_check[1]) > 0 else 0
-            except Exception:
+            except (ValueError, TypeError, KeyError) as exc:
+                log.warning("[StepDown] k-anonymity check failed: %s", exc)
                 stepped_min_k = lower_k  # assume achieved
 
         stepped_meets_k = (stepped_min_k is not None

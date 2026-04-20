@@ -482,8 +482,8 @@ def _generalize_column(series: pd.Series, col_name: str, gen_config: Dict, level
                         _log.info("[kANON-GEN] Detected '%s' as date strings (dayfirst=%s)",
                                   col_name, _df_flag)
                         break
-            except Exception:
-                pass
+            except (ValueError, TypeError, OverflowError) as exc:
+                _log.warning("[kANON-GEN] Date string detection failed for '%s': %s", col_name, exc)
 
     # Datetime column — bin by quarter/year to preserve temporal structure
     if is_datetime:
@@ -516,7 +516,8 @@ def _generalize_column(series: pd.Series, col_name: str, gen_config: Dict, level
             # Detect skewness — quantile binning for heavily skewed data
             try:
                 _skew = abs(float(series.skew()))
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                _log.warning("[kANON-GEN] Skewness calculation failed for '%s': %s", col_name, exc)
                 _skew = 0.0
 
             if _skew > 3.0:
@@ -725,6 +726,15 @@ def _achieve_kanon_generalization(
     log = logging.getLogger(__name__)
 
     protected_data = data.copy()
+
+    # Fix dtype mismatch: R/rpy2 loads integers as numpy int32 which causes
+    # "Buffer dtype mismatch" in pandas merge. Cast to int64 for safety.
+    for _qi in quasi_identifiers:
+        if _qi in protected_data.columns:
+            _dt = protected_data[_qi].dtype
+            if pd.api.types.is_integer_dtype(_dt) and _dt != 'int64':
+                protected_data[_qi] = protected_data[_qi].astype('int64')
+
     generalization_levels = {qi: 0 for qi in quasi_identifiers}
     max_levels = 5  # Default maximum generalization levels per QI
 
@@ -1260,8 +1270,10 @@ def _beam_search_generalization(
                     l_target=l_target, size_threshold=200)
                 if not l_res.get('satisfied', True):
                     return False
-            except Exception:
-                pass  # Don't block on check failure
+            except (ImportError, ModuleNotFoundError):
+                pass  # Module not available — skip l-diversity check
+            except (ValueError, KeyError, TypeError) as exc:
+                log.warning("[kANON-BEAM] l-diversity check failed: %s", exc)
         if t_target and sensitive_columns:
             try:
                 from sdc_engine.sdc.post_protection_diagnostics import check_t_closeness
@@ -1270,8 +1282,10 @@ def _beam_search_generalization(
                     t_target=t_target, size_threshold=200)
                 if not t_res.get('satisfied', True):
                     return False
-            except Exception:
-                pass  # Don't block on check failure
+            except (ImportError, ModuleNotFoundError):
+                pass  # Module not available — skip t-closeness check
+            except (ValueError, KeyError, TypeError) as exc:
+                log.warning("[kANON-BEAM] t-closeness check failed: %s", exc)
         return True
 
     # ── Initial beam ────────────────────────────────────────────────

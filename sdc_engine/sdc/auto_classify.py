@@ -91,7 +91,7 @@ def auto_classify(
     var_priority : dict
         Backward-elimination results from risk computation.
         ``{col: (priority_label, contribution_pct)}``
-        e.g. ``{'age': ('🔴 HIGH', 22.5), 'sex': ('⚪ LOW', 1.3)}``.
+        e.g. ``{'age': ('HIGH', 22.5), 'sex': ('LOW', 1.3)}``.
     data_type_labels : dict, optional
         Semantic type labels from Configure table ``{col: 'Integer — Age (demographic)'}``.
         Used for domain boosters.  Falls back to ``identify_column_types()`` if None.
@@ -119,8 +119,10 @@ def auto_classify(
     try:
         from sdc_engine.sdc.sdc_preprocessing import detect_greek_identifiers
         greek_ids = detect_greek_identifiers(data) or {}
-    except Exception:
-        pass
+    except (ImportError, ModuleNotFoundError):
+        pass  # Module not available — skip Greek detection
+    except (ValueError, KeyError, TypeError) as exc:
+        logger.warning("Greek identifier detection failed: %s", exc)
 
     all_identifiers = {**detected_direct_ids, **greek_ids}
 
@@ -680,8 +682,8 @@ def _sensitive_score_column(
             elif ent > 3.0:
                 score += 0.15
                 reasons.append(f"Moderate entropy ({ent:.1f} bits)")
-        except Exception:
-            pass
+        except (ValueError, TypeError) as exc:
+            logger.warning("Entropy calculation failed for column: %s", exc)
 
     # 3. Skewness — heavily right-skewed numerics (income, prices, areas)
     #    are almost always analytical targets, not classifiers.
@@ -691,8 +693,8 @@ def _sensitive_score_column(
             if abs(skew) > 2.0:
                 score += 0.15
                 reasons.append(f"Skewed distribution (skew={skew:.1f}) — typical measurement data")
-        except Exception:
-            pass
+        except (ValueError, TypeError) as exc:
+            logger.warning("Skewness calculation failed for column: %s", exc)
 
     # 4. Numeric with moderate cardinality (20-500 unique) + low risk
     #    Too many values to be a categorical QI, too few to be an ID.
@@ -832,7 +834,8 @@ def _is_ratio_pattern(series: pd.Series, col_lower: str) -> bool:
                 return True
 
         return False
-    except Exception:
+    except (ValueError, TypeError, OverflowError) as exc:
+        logger.warning("Ratio/percentage detection failed: %s", exc)
         return False
 
 
@@ -863,7 +866,8 @@ def _is_sequential_count(series: pd.Series) -> bool:
         expected_count = vmax - vmin + 1
         coverage = len(unique_vals) / expected_count if expected_count > 0 else 0
         return coverage >= 0.80
-    except Exception:
+    except (ValueError, TypeError, OverflowError) as exc:
+        logger.warning("Sequential count detection failed: %s", exc)
         return False
 
 
@@ -1149,8 +1153,11 @@ def _cross_column_diagnostics(
                                 f"Consider keeping only the finest or coarsest."
                             ),
                         })
-            except Exception:
-                pass
+            except (KeyError, ValueError, TypeError) as exc:
+                logger.warning(
+                    "Hierarchy detection failed for (%s, %s): %s",
+                    coarse, fine, exc,
+                )
 
     # --- Functional dependencies among QIs ---
     qi_all_cols = [
@@ -1206,8 +1213,11 @@ def _cross_column_diagnostics(
                                 f"inflates combination space. Consider keeping only {col_b}."
                             ),
                         })
-                except Exception:
-                    pass
+                except (KeyError, ValueError, TypeError) as exc:
+                    logger.warning(
+                        "Functional dependency check failed for (%s, %s): %s",
+                        col_a, col_b, exc,
+                    )
 
     # --- Highly correlated numeric pairs ---
     sens_num_cols = [
@@ -1232,7 +1242,7 @@ def _cross_column_diagnostics(
                                 f"Near-redundant — consider whether both need the same role."
                             ),
                         })
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as exc:
+            logger.warning("Correlation analysis for sensitive columns failed: %s", exc)
 
     return warnings

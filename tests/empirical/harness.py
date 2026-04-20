@@ -13,6 +13,7 @@ from .outcomes import Outcome, run_outcome
 def run_matrix(
     threshold_ids: Optional[List[str]] = None,
     dataset_names: Optional[List[str]] = None,
+    risk_metric: str = 'reid95',
     risk_target: float = 0.05,
 ) -> pd.DataFrame:
     """Run every (threshold x value x dataset) combination.
@@ -30,6 +31,7 @@ def run_matrix(
             "and place data files in tests/empirical/data/"
         )
 
+    print(f"Risk metric: {risk_metric}, target: {risk_target}")
     all_outcomes: List[Outcome] = []
     for threshold in thresholds:
         relevant_datasets = [
@@ -50,13 +52,18 @@ def run_matrix(
                 outcome = run_outcome(
                     df, ds.quasi_identifiers, ds.sensitive_columns,
                     threshold.id, value, threshold.patcher,
+                    risk_metric=risk_metric,
                     risk_target=risk_target,
                 )
                 outcome.dataset = ds.name
                 all_outcomes.append(outcome)
                 status = "OK" if outcome.target_met else "miss"
+                extra = ""
+                if risk_metric == 'k_anonymity' and outcome.min_k_after is not None:
+                    extra = f" min_k={outcome.min_k_after}"
                 print(f"{status} rule={outcome.selected_rule} "
-                      f"initial={outcome.initial_method} -> {outcome.selected_method}")
+                      f"initial={outcome.initial_method} -> "
+                      f"{outcome.selected_method}{extra}")
 
     return pd.DataFrame([o.as_dict() for o in all_outcomes])
 
