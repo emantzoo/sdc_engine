@@ -313,7 +313,7 @@ def pipeline_rules(features: Dict) -> Dict:
     Parameters:
     -----------
     features : dict
-        Output from extract_data_features_with_reid()
+        Output from build_data_features()
 
     Returns:
     --------
@@ -382,7 +382,7 @@ def select_method_suite(
     Parameters:
     -----------
     features : dict
-        Output from extract_data_features_with_reid()
+        Output from build_data_features()
     access_tier : str
         Target access tier: 'PUBLIC', 'SCIENTIFIC', or 'SECURE'
     verbose : bool
@@ -404,8 +404,9 @@ def select_method_suite(
 
     Example:
     --------
-    >>> from src.selection import extract_data_features_with_reid, select_method_suite
-    >>> features = extract_data_features_with_reid(data, analysis, qis)
+    >>> from sdc_engine.sdc.protection_engine import build_data_features
+    >>> from sdc_engine.sdc.selection import select_method_suite
+    >>> features = build_data_features(data, qis)
     >>> suite = select_method_suite(features, access_tier='PUBLIC')
     >>> print(f"Try {suite['primary']} first, fallbacks: {[m[0] for m in suite['fallbacks']]}")
     """

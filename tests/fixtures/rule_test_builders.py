@@ -109,9 +109,8 @@ def build_med1_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
 def build_dominated_risk_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
     """Would trigger RC1 if var_priority were populated.
 
-    RC rules require var_priority from backward elimination, which is NOT
-    computed by extract_data_features_with_reid. The test injects
-    var_priority manually.
+    RC rules require var_priority from backward elimination. The test
+    injects var_priority manually to control concentration patterns.
     """
     rng = _rng()
     n = 800
@@ -270,9 +269,7 @@ def build_hr6_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
 def build_extreme_uniqueness_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
     """Dataset for HR1/HR3 uniqueness risk rules.
 
-    HR rules require features['uniqueness_rate'] > threshold, but
-    extract_data_features_with_reid always gets uniqueness_rate=0 because
-    analyze_data() puts it in disclosure_risk sub-dict, not top-level.
+    HR rules require features['uniqueness_rate'] > threshold.
     Tests must inject uniqueness_rate manually into features.
     """
     rng = _rng()

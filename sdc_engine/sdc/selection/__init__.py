@@ -10,13 +10,13 @@ Main Entry Point:
 
 Components:
 -----------
-- features: Feature extraction with ReID metrics
+- features: Risk concentration classification, categorical QI helpers
 - rules: Selection rules (data structure, ReID risk, distribution)
 - pipelines: Multi-method pipeline selection
 
 Typical Workflow:
 -----------------
-1. Extract features: features = extract_data_features_with_reid(data, analysis, qis)
+1. Extract features: features = build_data_features(data, qis)
 2. Get method suite: suite = select_method_suite(features, access_tier='PUBLIC')
 3. Try primary: result = apply_method(data, suite['primary'], suite['primary_params'])
 4. If fails, try fallbacks: for method, params in suite['fallbacks']: ...
@@ -34,7 +34,6 @@ Rule Priority:
 9. Default Rules - Final fallbacks
 """
 
-from .features import extract_data_features_with_reid
 from .rules import (
     data_structure_rules,
     categorical_aware_rules,
@@ -66,7 +65,6 @@ __all__ = [
     # Main entry point
     'select_method_suite',
     # Feature extraction
-    'extract_data_features_with_reid',
     'classify_risk_pattern',
     # Selection rules
     'data_structure_rules',

@@ -52,8 +52,9 @@ processed_data, processed_qis, result = preprocess_for_anonymization(
 )
 
 # 4. Method selection
-from src.selection import select_method_suite, extract_data_features_with_reid
-features = extract_data_features_with_reid(processed_data, analysis, processed_qis)
+from sdc_engine.sdc.protection_engine import build_data_features
+from sdc_engine.sdc.selection import select_method_suite
+features = build_data_features(processed_data, processed_qis)
 suite = select_method_suite(features, access_tier='PUBLIC')
 ```
 

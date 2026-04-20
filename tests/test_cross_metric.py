@@ -48,10 +48,8 @@ from sdc_engine.sdc.metrics.risk_metric import (
 )
 from sdc_engine.sdc.protection_engine import build_data_features
 from sdc_engine.sdc.selection import (
-    extract_data_features_with_reid,
     select_method_suite,
 )
-from sdc_engine.sdc.sdc_utils import analyze_data
 
 
 # ============================================================================
@@ -133,10 +131,39 @@ def categorical_only_qis():
     return ["age_band", "sex", "area", "education", "occupation"]
 
 
+def _build_test_features(df, qis):
+    """Build features for testing, matching legacy extract_data_features_with_reid scope."""
+    from sdc_engine.sdc.sdc_utils import analyze_data
+    from sdc_engine.sdc.metrics.reid import classify_risk_pattern
+    features = build_data_features(df, qis)
+    features.pop('var_priority', None)
+    features.pop('risk_concentration', None)
+    # 1. Overlay analysis-scoped continuous/categorical vars
+    analysis = analyze_data(df, quasi_identifiers=qis, verbose=False)
+    features['continuous_vars'] = analysis.get('continuous_variables', [])
+    features['categorical_vars'] = analysis.get('categorical_variables', [])
+    features['n_continuous'] = len(features['continuous_vars'])
+    features['n_categorical'] = len(features['categorical_vars'])
+    features['n_columns'] = len(df.columns)
+    # 2. Overlay canonical risk_pattern from metrics.reid classifier
+    if features.get('has_reid'):
+        reid_metrics = {
+            'reid_50': features.get('reid_50', 0),
+            'reid_95': features.get('reid_95', 0),
+            'reid_99': features.get('reid_99', 0),
+            'mean_risk': features.get('mean_risk', 0),
+        }
+        pattern = classify_risk_pattern(reid_metrics)
+        features['risk_pattern'] = pattern
+        features['risk_level'] = pattern
+    # 3. Overlay legacy uniqueness_rate (analysis-derived, typically 0)
+    features['uniqueness_rate'] = analysis.get('uniqueness_rate', 0)
+    return features
+
+
 def _suite_from_df(df, qis, access_tier="standard", feature_overrides=None):
     """Run the full rule chain and return (suite, features)."""
-    analysis = analyze_data(df, quasi_identifiers=qis, verbose=False)
-    features = extract_data_features_with_reid(df, analysis, qis)
+    features = _build_test_features(df, qis)
     if feature_overrides:
         features.update(feature_overrides)
     return select_method_suite(features, access_tier=access_tier, verbose=False), features
@@ -397,8 +424,7 @@ class TestMethodSuiteMetricFiltering:
     @pytest.mark.parametrize("metric", STRUCTURAL_ONLY_METRICS)
     def test_primary_is_structural(self, metric, base_df, base_qis):
         """Under k_anonymity or uniqueness, the primary method must be structural."""
-        analysis = analyze_data(base_df, quasi_identifiers=base_qis, verbose=False)
-        features = extract_data_features_with_reid(base_df, analysis, base_qis)
+        features = _build_test_features(base_df, base_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         primary = suite["primary"]
@@ -409,8 +435,7 @@ class TestMethodSuiteMetricFiltering:
     @pytest.mark.parametrize("metric", STRUCTURAL_ONLY_METRICS)
     def test_no_perturbative_in_fallbacks(self, metric, base_df, base_qis):
         """Under k_anonymity/uniqueness, PRAM and NOISE must not appear in fallbacks."""
-        analysis = analyze_data(base_df, quasi_identifiers=base_qis, verbose=False)
-        features = extract_data_features_with_reid(base_df, analysis, base_qis)
+        features = _build_test_features(base_df, base_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         for method, params in suite.get("fallbacks", []):
@@ -421,8 +446,7 @@ class TestMethodSuiteMetricFiltering:
     @pytest.mark.parametrize("metric", STRUCTURAL_ONLY_METRICS)
     def test_no_perturbative_in_pipeline(self, metric, base_df, base_qis):
         """If a pipeline is selected, it must not contain PRAM or NOISE."""
-        analysis = analyze_data(base_df, quasi_identifiers=base_qis, verbose=False)
-        features = extract_data_features_with_reid(base_df, analysis, base_qis)
+        features = _build_test_features(base_df, base_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         if suite.get("use_pipeline"):
@@ -433,14 +457,7 @@ class TestMethodSuiteMetricFiltering:
 
     def test_reid95_can_select_pram(self, categorical_only_df, categorical_only_qis):
         """Under reid95, PRAM should be selectable for categorical-dominant data."""
-        analysis = analyze_data(
-            categorical_only_df,
-            quasi_identifiers=categorical_only_qis,
-            verbose=False,
-        )
-        features = extract_data_features_with_reid(
-            categorical_only_df, analysis, categorical_only_qis
-        )
+        features = _build_test_features(categorical_only_df, categorical_only_qis)
         features["_risk_metric_type"] = "reid95"
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         # Under reid95, any method is valid -- just check it does not crash
@@ -456,14 +473,7 @@ class TestMethodSuiteMetricFiltering:
         k_anonymity/uniqueness, PRAM is blocked so the engine must fall through
         to a structural alternative.
         """
-        analysis = analyze_data(
-            categorical_only_df,
-            quasi_identifiers=categorical_only_qis,
-            verbose=False,
-        )
-        features = extract_data_features_with_reid(
-            categorical_only_df, analysis, categorical_only_qis
-        )
+        features = _build_test_features(categorical_only_df, categorical_only_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         assert suite["primary"] in {"kANON", "LOCSUPR", "GENERALIZE"}, (
@@ -473,8 +483,7 @@ class TestMethodSuiteMetricFiltering:
     @pytest.mark.parametrize("metric", STRUCTURAL_ONLY_METRICS)
     def test_reid_fallback_is_structural(self, metric, base_df, base_qis):
         """The reid_fallback method (if any) must also be structural."""
-        analysis = analyze_data(base_df, quasi_identifiers=base_qis, verbose=False)
-        features = extract_data_features_with_reid(base_df, analysis, base_qis)
+        features = _build_test_features(base_df, base_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         fb = suite.get("reid_fallback")
@@ -499,8 +508,9 @@ class TestCrossMetricConsistency:
         """
         suites = {}
         for metric in STRUCTURAL_ONLY_METRICS:
-            analysis = analyze_data(base_df, quasi_identifiers=base_qis, verbose=False)
-            features = extract_data_features_with_reid(base_df, analysis, base_qis)
+            features = build_data_features(base_df, base_qis)
+            features.pop('var_priority', None)
+            features.pop('risk_concentration', None)
             features["_risk_metric_type"] = metric
             suites[metric] = select_method_suite(
                 features, access_tier="standard", verbose=False
@@ -660,12 +670,7 @@ class TestHighRiskForcesStructural:
 
     @pytest.mark.parametrize("metric", ALL_METRICS)
     def test_structural_selected(self, metric, high_risk_df, high_risk_qis):
-        analysis = analyze_data(
-            high_risk_df, quasi_identifiers=high_risk_qis, verbose=False
-        )
-        features = extract_data_features_with_reid(
-            high_risk_df, analysis, high_risk_qis
-        )
+        features = _build_test_features(high_risk_df, high_risk_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         assert suite["primary"] in {"kANON", "LOCSUPR", "GENERALIZE", "NOISE"}, (
@@ -692,8 +697,7 @@ class TestNoExceptionsAcrossMetrics:
     @pytest.mark.parametrize("metric", ALL_METRICS)
     @pytest.mark.parametrize("tier", ["standard", "PUBLIC", "SECURE"])
     def test_suite_no_exception(self, metric, tier, base_df, base_qis):
-        analysis = analyze_data(base_df, quasi_identifiers=base_qis, verbose=False)
-        features = extract_data_features_with_reid(base_df, analysis, base_qis)
+        features = _build_test_features(base_df, base_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier=tier, verbose=False)
         assert "primary" in suite
