@@ -8,11 +8,16 @@ Pipelines are triggered when single methods are demonstrably insufficient.
 """
 
 import logging
+import os
 from typing import Dict, List
 
 from .features import top_categorical_qis
 
 log = logging.getLogger(__name__)
+
+# Spec 16 audit flag — when set, select_method_suite() evaluates all rules
+# (no short-circuit) and attaches a _rule_trace to the result.
+_RULE_AUDIT = os.environ.get('SDC_RULE_AUDIT', '') == '1'
 
 
 def _is_infeasible(features: Dict) -> bool:
@@ -459,9 +464,46 @@ def select_method_suite(
     def _is_allowed(method):
         return is_method_allowed_for_metric(method, risk_metric) and method not in _excluded
 
+    # ------------------------------------------------------------------
+    # Spec 16 audit trace — when SDC_RULE_AUDIT=1, evaluate all rules
+    # (no short-circuit) and attach _rule_trace to the result.
+    # When off, behaviour is byte-identical to pre-instrumentation.
+    # ------------------------------------------------------------------
+    _audit = _RULE_AUDIT
+    _trace = [] if _audit else None  # None = audit off, list = collecting
+    _winner = None  # first matching result (what we'd return normally)
+
+    def _record_trace(rule_name, applies, method_or_pipeline, *,
+                      blocked=False, blocked_reason=''):
+        """Append one entry to the audit trace (no-op when audit off)."""
+        if _trace is None:
+            return
+        entry = {
+            'rule': rule_name,
+            'applies': applies,
+            'method': method_or_pipeline,
+        }
+        if blocked:
+            entry['blocked'] = True
+            entry['blocked_reason'] = blocked_reason
+        _trace.append(entry)
+
     # Check pipeline rules first
     pipeline_result = pipeline_rules(features)
-    if pipeline_result.get('applies') and _all_allowed(pipeline_result['pipeline']):
+    _pipeline_applies = (pipeline_result.get('applies')
+                         and _all_allowed(pipeline_result.get('pipeline', [])))
+
+    if pipeline_result.get('applies') and not _all_allowed(pipeline_result.get('pipeline', [])):
+        _record_trace(pipeline_result.get('rule', 'PIPELINE'),
+                      True, pipeline_result.get('pipeline'),
+                      blocked=True, blocked_reason=f'metric={risk_metric}')
+    elif pipeline_result.get('applies'):
+        _record_trace(pipeline_result.get('rule', 'PIPELINE'),
+                      True, pipeline_result.get('pipeline'))
+    else:
+        _record_trace('PIPELINE', False, None)
+
+    if _pipeline_applies:
         log.info("[MethodSuite] Pipeline match: %s -> %s",
                  pipeline_result['rule'], pipeline_result['pipeline'])
         # Use rule-level fallbacks if provided, otherwise default to kANON k=7
@@ -502,7 +544,10 @@ def select_method_suite(
         # Apply user preference bias (parameter nudge)
         if _preference != 'auto':
             pipeline_suite = _apply_preference_bias(pipeline_suite, _preference)
-        return pipeline_suite
+
+        if not _audit:
+            return pipeline_suite
+        _winner = pipeline_suite
 
     # Apply rules in priority order (first match wins) — lazy evaluation
     rule_factories = [
@@ -536,7 +581,13 @@ def select_method_suite(
                 if not _all_allowed(pipeline):
                     log.info("[MethodSuite] Skipping pipeline rule %s — "
                              "blocked by metric %s", rule.get('rule', '?'), risk_metric)
+                    _record_trace(rule.get('rule', '?'), True, pipeline,
+                                  blocked=True, blocked_reason=f'metric={risk_metric}')
                     continue
+                _record_trace(rule.get('rule', '?'), True, pipeline)
+                if _winner is not None:
+                    continue  # audit mode: already have winner, just recording
+
                 pipeline_params = rule.get('parameters', {})
                 log.info("[MethodSuite] Inline pipeline from rule: %s -> %s",
                          rule.get('rule', '?'), pipeline)
@@ -548,7 +599,7 @@ def select_method_suite(
                     reid_fb = None
                 if util_fb and not _is_allowed(util_fb['method']):
                     util_fb = None
-                return {
+                _result = {
                     'primary': pipeline[0],
                     'primary_params': pipeline_params.get(pipeline[0], {}),
                     'fallbacks': [(m, pipeline_params.get(m, {})) for m in pipeline[1:]],
@@ -560,13 +611,23 @@ def select_method_suite(
                     'reason': rule.get('reason', ''),
                     'use_pipeline': True,
                 }
+                if not _audit:
+                    return _result
+                _winner = _result
+                continue
 
             # Skip single-method rule if its primary is blocked or excluded
             if not _is_allowed(rule.get('method', '')):
                 log.info("[MethodSuite] Skipping rule %s (method %s) — "
                          "blocked by metric %s or user-excluded",
                          rule.get('rule', '?'), rule.get('method', '?'), risk_metric)
+                _record_trace(rule.get('rule', '?'), True, rule.get('method'),
+                              blocked=True, blocked_reason=f'metric={risk_metric}')
                 continue
+
+            _record_trace(rule.get('rule', '?'), True, rule.get('method'))
+            if _winner is not None:
+                continue  # audit mode: already have winner, just recording
 
             log.info("[MethodSuite] Rule match: %s -> %s  confidence=%s  reason=%s",
                      rule.get('rule', '?'), rule.get('method', '?'),
@@ -626,7 +687,7 @@ def select_method_suite(
                 print(f"  Confidence: {rule.get('confidence', 'MEDIUM')}")
                 print(f"  Reason: {rule.get('reason', 'N/A')}")
 
-            result = {
+            _result = {
                 'primary': rule['method'],
                 'primary_params': rule.get('parameters', {}),
                 'fallbacks': fallbacks,
@@ -640,14 +701,25 @@ def select_method_suite(
             }
             # Propagate preprocessing hint from risk-concentration rules
             if rule.get('preprocessing_hint'):
-                result['preprocessing_hint'] = rule['preprocessing_hint']
+                _result['preprocessing_hint'] = rule['preprocessing_hint']
             # Apply user preference bias (parameter nudge, not rule override)
             if _preference != 'auto':
-                result = _apply_preference_bias(result, _preference)
-            return result
+                _result = _apply_preference_bias(_result, _preference)
+            if not _audit:
+                return _result
+            _winner = _result
+            continue
+
+        # Rule didn't apply
+        _record_trace(rule_fn.__name__, False, None)
+
+    # If we reach here with a winner (audit mode), attach trace and return
+    if _winner is not None:
+        _winner['_rule_trace'] = _trace
+        return _winner
 
     # Emergency fallback
-    return {
+    _fallback = {
         'primary': 'kANON',
         'primary_params': {'quasi_identifiers': qis, 'k': 5},
         'fallbacks': [
@@ -663,3 +735,6 @@ def select_method_suite(
         'reason': 'No specific rule matched - using default k-anonymity',
         'use_pipeline': False,
     }
+    if _audit:
+        _fallback['_rule_trace'] = _trace
+    return _fallback
