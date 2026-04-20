@@ -581,7 +581,7 @@ These are the only thresholds grounded in published SDC literature rather than e
 | Mid-pipeline risk multiplier (other) | 1.20 | Early exit if reid < target × 1.20 | Medium |
 | Escalation time budget | ~30s per phase | Stops escalation if phase exceeds | High — prevents runaway |
 | Max fallbacks | 5 | Cap on fallback attempts | High |
-| Plateau detection | reid improvement < 0.001 | Skip to next method if stalled | Medium-high |
+| Plateau detection | reid improvement < 0.001 | Skip to next method if stalled | Medium-high — often indicates structural floor (see [F4 investigation](investigations/spec_12_f4_reid_floor.md)) |
 | Perturbative filter | best_reid > target | Strip PRAM/NOISE from fallbacks when structural needed | High |
 | k step-down gap | achieved_k > target_k + 2 | Trigger step-down check | Medium-high |
 | k step-down suppression | > 2% | Only step down if there's suppression to save | High |

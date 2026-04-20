@@ -2414,6 +2414,8 @@ The retry loop in `run_rules_engine_protection()`:
 3. **Fallbacks** — Try each fallback method with bidirectional cross-method start params, per-QI injection, and its own escalation schedule. Up to 5 fallback methods tried. Perturbation-only methods (PRAM/NOISE) are filtered out if ReID is far above target (they cannot close a structural gap). Current ReID is tracked across fallbacks for accurate gap calculation.
 4. **Feasibility suggestion** — If all methods fail, `ensure_feasibility()` suggests QI removal or binning (advisory only — user must confirm).
 
+> **ReID floor:** Every dataset has a minimum achievable reid_95 determined by `n_rows / combination_space`. When the retry engine "plateaus" (reid stops improving), this is usually a structural floor, not a tuning failure. Datasets with many QIs, high-cardinality variables, or few rows may not reach aggressive targets (e.g., 5%) without unacceptable suppression. See [Spec 12 F4 investigation](investigations/spec_12_f4_reid_floor.md) for details.
+
 #### 4.4 Suppression Estimation
 
 Both `extract_data_features_with_reid()` and `build_data_features()` compute `estimated_suppression` — a dict mapping k values (3, 5, 7) to the fraction of records in equivalence classes smaller than that k. Computed from a single groupby pass. QR2 uses the k=7 estimate when deciding whether to switch from kANON k=7 to LOCSUPR (threshold: 25% suppression). CAT1 reports the k=5 estimate in its reasoning. The legacy key `estimated_suppression_k5` is preserved for backward compatibility.
