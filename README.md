@@ -99,6 +99,25 @@ streamlit run streamlit_app/app.py
 
 The app runs at `http://localhost:8501`. Enter your Cerebras API key in the sidebar to enable AI-assisted modes.
 
+### Optional: R/sdcMicro setup
+
+R/sdcMicro is **not required** — all methods have pure-Python implementations. When available, LOCSUPR and NOISE use sdcMicro's optimized algorithms (fewer suppressions, less distortion). The sidebar shows R availability status.
+
+```bash
+# 1. Install R (4.3+)
+#    Windows: https://cran.r-project.org/bin/windows/base/
+#    macOS:   brew install r
+#    Linux:   sudo apt install r-base
+
+# 2. Install sdcMicro in R
+Rscript -e "install.packages('sdcMicro', repos='https://cran.r-project.org')"
+
+# 3. Install rpy2 in Python
+pip install rpy2
+```
+
+Verify: the Streamlit sidebar will show "sdcMicro: Available" when R is detected. Use the toggle to enable/disable the R backend at runtime.
+
 ## Programmatic Usage
 
 ```python
