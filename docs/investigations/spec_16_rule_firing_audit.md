@@ -97,7 +97,7 @@ whether it improves outcomes. Phase 2 would upgrade these to live/niche/redundan
 
 | Rule | Verdict | Rationale | Recommended follow-up |
 |---|---|---|---|
-| SR3 | **untriggered** | All 3 gate conditions (n_qis ≤ 2, max_uniq > 0.70, reid > 0.20) never simultaneously met in harness. Gate is valid — a 2-QI dataset with one high-cardinality continuous QI would hit it | Add fixture or accept as edge-case |
+| SR3 | **niche (verified)** | Fixture G10 (2 QIs, max_qi_uniqueness=0.80, reid_95=1.0) fires SR3 correctly (Spec 18 Item 5). Requires injected max_qi_uniqueness since build_data_features doesn't compute it | Keep as niche rule. Note: max_qi_uniqueness feature gap same class as HR1-HR5 uniqueness_rate |
 | HR6 | **untriggered** | No dataset < 200 rows in harness. Gate is valid defensive code | Accept as edge-case |
 
 ### Risk concentration rules
@@ -282,7 +282,7 @@ Based on this audit, Spec 18 should address:
 | 4 | ~~Add temporal fixture for DATE1~~ **Done** | 1 rule | Threshold widened 0.80→0.50 (Spec 18 Item 3) |
 | 5 | ~~Decide on DP4~~ **Done** | 1 rule | Reid ceiling tightened 0.30→0.20 (Spec 18 Item 4) |
 | 6 | Accept HR1-HR5 as defensive | 5 rules | untriggered but valid. Document as fallback-only |
-| 7 | Add fixture for SR3 | 1 rule | untriggered but valid gate. Low priority |
+| 7 | ~~Add fixture for SR3~~ **Done** | 1 rule | G10 fixture added, SR3 verified as niche (Spec 18 Item 5) |
 
 Items 1-3 are deletions/fixes (reduce dead code). Items 4-7 are
 keep-or-delete decisions that require less urgency.

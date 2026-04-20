@@ -151,6 +151,17 @@ def main():
                "LOW2_Continuous_Noise")
     results.append(("G7", "LOW2_Continuous_Noise", r))
 
+    # G10: SR3_Near_Unique_Few_QIs (2 QIs, one high-uniqueness, moderate reid)
+    # max_qi_uniqueness INJECTED — build_data_features doesn't compute it.
+    # Spec 18 Item 5: fixture proves SR3 fires on realistic 2-QI data.
+    r = verify("G10_SR3", "fixture_sr3_few_qis.csv",
+               ["id_code", "sex"],
+               "SR3_Near_Unique_Few_QIs",
+               feature_overrides={
+                   'max_qi_uniqueness': 0.80,
+               })
+    results.append(("G10", "SR3_Near_Unique_Few_QIs", r))
+
     # G8: Floor regime (just verify features, not a specific rule)
     df = pd.read_csv(DATA_DIR / "fixture_g8_floor.csv")
     features = build_data_features(df, ["dept", "grade", "shift"])

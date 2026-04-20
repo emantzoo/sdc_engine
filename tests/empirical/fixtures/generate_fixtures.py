@@ -534,6 +534,38 @@ def g9_rc4():
           f"postcode unique={df['postcode'].nunique()}")
 
 
+def g10_sr3():
+    """G10: SR3_Near_Unique_Few_QIs (LOCSUPR on near-unique 2-QI data).
+
+    Trigger (rules.py line 257-299):
+    - has_reid = True
+    - n_qis <= 2
+    - max_qi_uniqueness > 0.70
+    - reid_95 > 0.20
+
+    IMPORTANT: max_qi_uniqueness is INJECTED in verify_fixtures.py because
+    build_data_features() does not compute it (same class of feature-gap
+    as HR1-HR5 uniqueness_rate).
+
+    Dataset: 200 rows, 2 QIs. id_code has 80% uniqueness (160/200 unique
+    integer codes). sex has 2 categories. reid_95 will be high (~1.0) due
+    to the sparse id_code column.
+    """
+    n = 200
+    # id_code: 160 unique values + 40 repeats = 80% uniqueness
+    id_vals = list(range(1, 161)) + list(np.random.randint(1, 161, size=40))
+    np.random.shuffle(id_vals)
+    id_code = id_vals[:n]
+
+    sex = np.random.choice(['M', 'F'], size=n)
+    income = np.random.randint(10000, 80000, size=n)
+
+    df = pd.DataFrame({'id_code': id_code, 'sex': sex, 'income': income})
+    df.to_csv(DATA_DIR / "fixture_sr3_few_qis.csv", index=False)
+    print(f"G10: {len(df)} rows, id_code unique={df['id_code'].nunique()}, "
+          f"uniqueness={df['id_code'].nunique()/n:.2f}")
+
+
 if __name__ == "__main__":
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     g1_ldiv1()
@@ -545,4 +577,5 @@ if __name__ == "__main__":
     g7_low2()
     g8_floor()
     g9_rc4()
+    g10_sr3()
     print("\nAll fixtures generated.")
