@@ -2324,7 +2324,7 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 | LDIV1 | Sensitive column n_unique ≤5 + estimated min_l <2 (attribute disclosure risk) | 0.15 |
 | LDIV1+DATE1 | LDIV1 conditions + ≥50% temporal QIs — merged PRAM on sensitive + date cols | 0.20–0.25 |
 | DATE1 | ≥50% of QIs are temporal + ReID95 ≤40% (preserves temporal distributions) | 0.20–0.25 |
-| DP4 | Integer-coded categorical QIs (≤15 unique ints) + ReID95 ≤30% | 0.20–0.30 |
+| DP4 | Integer-coded categorical QIs (≤15 unique ints) + ReID95 ≤20% | 0.20–0.30 |
 | LOW1 | ReID95 ≤10%, categorical-dominant (≥60%), low cardinality | 0.15–0.20 |
 | HR4 | Very small dataset (<100 records), no ReID | 0.30 |
 | HR5 small (no cont.) | Small dataset (100–500), no continuous QIs, no ReID | 0.25 |
@@ -2353,7 +2353,7 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 
 **DATE1 — Temporal-dominant QIs:** When ≥50% of QIs are date/temporal, kANON generalization produces overlapping date ranges that are hard to interpret. PRAM on binned date columns preserves the temporal distribution shape. Note: if LDIV1 also applies, the two rules are merged (see LDIV1 above).
 
-**DP4 — Integer-coded categoricals:** Numeric columns with ≤15 unique integer values (e.g. municipality_code, education_level) are categorical codes. kANON range-binning ("1–5") destroys the coding structure. PRAM preserves it with p_change scaled to the number of categories.
+**DP4 — Integer-coded categoricals:** Numeric columns with ≤15 unique integer values (e.g. municipality_code, education_level) are categorical codes. kANON range-binning ("1–5") destroys the coding structure. PRAM preserves it with p_change scaled to the number of categories. Reid ceiling tightened to ≤20% (was ≤30%): at high reid, QR-family rules provide stronger structural methods.
 
 **HR6 — Very small dataset:** Datasets under 200 rows cannot support k≥5 without catastrophic suppression. HR6 fires early (before all other risk rules) and uses LOCSUPR k=3 with max 1 suppression per record. Issues a strong warning recommending synthetic data release.
 

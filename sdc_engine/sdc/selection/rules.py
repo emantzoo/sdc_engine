@@ -1110,9 +1110,11 @@ def distribution_rules(features: Dict) -> Dict:
     # Numeric columns with ≤15 unique integer values are likely categorical codes
     # (municipality_code, education_level, etc.).  kANON range-binning ("1-5")
     # destroys the coding structure — PRAM preserves it.
+    # Reid ceiling tightened from 0.30 to 0.20 (Spec 18 Item 4): at high reid,
+    # QR-family rules provide stronger methods; DP4 serves low-risk data only.
     integer_coded = features.get('integer_coded_qis', [])
     reid_95 = features.get('reid_95', 0)
-    if integer_coded and reid_95 <= 0.30:
+    if integer_coded and reid_95 <= 0.20:
         # Scale p_change: more categories → lower perturbation probability
         n_unique_max = max(
             features.get('qi_cardinalities', {}).get(qi, 10)

@@ -144,7 +144,7 @@ whether it improves outcomes. Phase 2 would upgrade these to live/niche/redundan
 | DP1 | **live-unverified** | Gate inside range. testdata, adult, greek all have outliers + continuous vars. But DP1 is priority 6 — likely preempted by higher-priority rules in practice | Phase 2 to measure actual fire rate. May be `preempted` |
 | DP2 | **live-unverified** | Gate inside range. G4 has 2 skewed cols, greek has 7. Same preemption caveat as DP1 | Phase 2 |
 | DP3 | **live-unverified** | Gate inside range via fixture injection. Requires sensitive columns | Phase 2 |
-| DP4 | **untriggered** | integer_coded_qis present on testdata (7) and free1 (5), but reid_95 ≥ 0.50 on both. Gate requires reid_95 ≤ 0.30 AND integer-coded QIs simultaneously. Also priority 6 — higher rules fire first | Add fixture with 3 integer-coded QIs at moderate reid, or accept as edge-case |
+| DP4 | **untriggered → tightened** | integer_coded_qis present on testdata (7) and free1 (5), but reid_95 ≥ 0.50 on both. Reid ceiling tightened from 0.30 to 0.20 (Spec 18 Item 4). Still untriggered on harness (no low-reid integer-coded fixture) | Accept as niche rule for low-risk data |
 
 ### Uniqueness risk rules (no-ReID fallback)
 
@@ -240,8 +240,9 @@ preempt it for most reid_95 values.
 
 **Evidence:** Phase 1b metric range scan.
 
-**Follow-up:** Low priority. Could add fixture but the useful firing window
-is very narrow. Candidate for deletion in Spec 18.
+**Spec 18 outcome:** Reid ceiling tightened from 0.30 to 0.20. Constrains
+DP4 to its intended niche (low-risk integer-coded data) where QR-family
+rules don't preempt. Still untriggered on harness.
 
 ### Finding 6: HR1-HR5 are untriggered due to has_reid=False gate
 
@@ -279,7 +280,7 @@ Based on this audit, Spec 18 should address:
 | 2 | Fix or delete DYN_CAT_Pipeline | 1 pipeline | unreachable. NOISE/l_diversity contradiction |
 | 3 | Investigate CAT2 preemption | 1 rule | Likely preempted by pipeline rules. Delete if confirmed |
 | 4 | ~~Add temporal fixture for DATE1~~ **Done** | 1 rule | Threshold widened 0.80→0.50 (Spec 18 Item 3) |
-| 5 | Decide on DP4 | 1 rule | untriggered, narrow window. Candidate for deletion |
+| 5 | ~~Decide on DP4~~ **Done** | 1 rule | Reid ceiling tightened 0.30→0.20 (Spec 18 Item 4) |
 | 6 | Accept HR1-HR5 as defensive | 5 rules | untriggered but valid. Document as fallback-only |
 | 7 | Add fixture for SR3 | 1 rule | untriggered but valid gate. Low priority |
 

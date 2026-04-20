@@ -572,7 +572,7 @@ Function gate: `reid_95 > 0.20` → skip. Within that gate:
 |---|---|---|---|
 | DP1 | Outliers present | NOISE | mag=0.20 |
 | DP2 | ≥2 skewed columns | PRAM | p=0.20 |
-| DP4 | Integer-coded categoricals | PRAM | p=0.20–0.30 |
+| DP4 | Integer-coded categoricals + reid ≤ 20% | PRAM | p=0.20–0.30 |
 
 #### Heuristic Fallbacks (HR) — no ReID available
 
