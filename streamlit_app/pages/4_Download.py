@@ -324,6 +324,11 @@ def _build_html_report(result, state: dict) -> str:
         _section_protection_log(state),
     ])
 
+    max_risk_before = reid_before.get('max_risk', 0)
+    max_risk_after = reid_after.get('max_risk', 0)
+    min_k_before = int(1 / max_risk_before) if max_risk_before > 0 else 0
+    min_k_after = int(1 / max_risk_after) if max_risk_after > 0 else 0
+
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <title>SDC Protection Report</title>
@@ -360,6 +365,7 @@ def _build_html_report(result, state: dict) -> str:
 <tr><th>Metric</th><th>Before</th><th>After</th></tr>
 <tr><td>ReID 95th</td><td>{reid_before.get('reid_95',0):.2%}</td><td>{reid_after.get('reid_95',0):.2%}</td></tr>
 <tr><td>ReID 99th</td><td>{reid_before.get('reid_99',0):.2%}</td><td>{reid_after.get('reid_99',0):.2%}</td></tr>
+<tr><td>min k</td><td>{min_k_before}</td><td>{min_k_after}</td></tr>
 <tr><td>High-risk rate</td><td>{reid_before.get('high_risk_rate',0):.2%}</td><td>{reid_after.get('high_risk_rate',0):.2%}</td></tr>
 <tr><td>Utility</td><td colspan="2">{(result.utility_score or 0):.2%}</td></tr>
 </table>
@@ -394,12 +400,15 @@ st.header("Download Protected Data")
 # ── Summary ───────────────────────────────────────────────────────────
 reid_after = result.reid_after or {}
 r95 = reid_after.get("reid_95", 0)
+max_risk = reid_after.get("max_risk", 0)
+min_k = int(1 / max_risk) if max_risk > 0 else 0
 risk_badge(r95)
 
 metric_cards({
     "Method": result.method,
     "Utility": result.utility_score or 0,
     "ReID 95th (after)": r95,
+    "min k": min_k,
     "Rows": len(result.protected_data),
 })
 

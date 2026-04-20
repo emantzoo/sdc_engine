@@ -306,7 +306,7 @@ def _run_protection(qis, sensitive, context, risk_metric, risk_target, mode="aut
 # ══════════════════════════════════════════════════════════════════════
 
 def _display_result(result, qis, sensitive, orig_data=None, log_entries=None,
-                    preprocess_meta=None):
+                    preprocess_meta=None, key_suffix=""):
     """Render a single ProtectionResult with all metrics and details.
 
     Parameters
@@ -318,6 +318,8 @@ def _display_result(result, qis, sensitive, orig_data=None, log_entries=None,
         Protection engine log.  Falls back to session state.
     preprocess_meta : dict, optional
         Preprocessing metadata.  Falls back to session state.
+    key_suffix : str, optional
+        Suffix to make widget keys unique when called multiple times.
     """
     if orig_data is None:
         _pp = st.session_state.get("preprocessed_data")
@@ -341,9 +343,12 @@ def _display_result(result, qis, sensitive, orig_data=None, log_entries=None,
     r95_before = reid_before.get("reid_95", 0)
     r95_after = reid_after.get("reid_95", 0)
     utility = result.utility_score or 0
+    max_risk_after = reid_after.get("max_risk", 0)
+    min_k_after = int(1 / max_risk_after) if max_risk_after > 0 else 0
 
     metric_cards_delta([
         ("ReID 95th", r95_after, r95_after - r95_before, True),
+        ("min k", min_k_after, 0, False),
         ("Utility", utility, 0, False),
         ("Method", result.method, "", False),
     ])
@@ -397,7 +402,7 @@ def _display_result(result, qis, sensitive, orig_data=None, log_entries=None,
     scores_after = reid_after.get("risk_scores", [])
     if scores_before and scores_after:
         fig = risk_histogram(scores_before, scores_after)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"risk_histogram{key_suffix}")
 
     # Sample comparison
     if result.protected_data is not None and orig_data is not None:
@@ -891,12 +896,13 @@ if plan_df is not None and len(plan_df) > 0:
             # Drill-down tabs
             tab_names = [sc["name"] for sc in scenarios[:len(comp.results)]]
             tabs = st.tabs(tab_names)
-            for tab, (sc, res) in zip(tabs, zip(scenarios, comp.results)):
+            for i, (tab, (sc, res)) in enumerate(zip(tabs, zip(scenarios, comp.results))):
                 with tab:
                     _display_result(
                         res, qis, sensitive,
                         log_entries=res.metadata.get("_log", []),
                         preprocess_meta=res.metadata.get("_preprocess_meta"),
+                        key_suffix=f"_sc{i}",
                     )
                     # "Use This Scenario" button
                     if st.button(
