@@ -454,7 +454,7 @@ flowchart TD
 
 | Pipeline | Trigger | Methods |
 |---|---|---|
-| DYN_CAT | 50–70% categorical, ≥1 continuous, ReID > 15% | NOISE → PRAM |
+| DYN_CAT | **l_diversity metric** + 50–70% categorical, ≥1 continuous, ReID > 15% | NOISE → PRAM |
 | GEO1 | ≥2 geo QIs (fine + coarse granularity) | GENERALIZE → kANON k=5 |
 | DYN | ReID > 20%, mixed types, outliers | kANON / NOISE / LOCSUPR |
 | P4 | ≥2 skewed + sensitive columns | kANON (± PRAM on sensitive) |
@@ -513,10 +513,12 @@ uses 0.03 (float comparison with 1e-6 tolerance). SEC1 only fires when
 
 #### Categorical-Aware Rules (CAT)
 
+> **Metric gate:** CAT1, CAT2, and DYN_CAT only fire when the active risk metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness) — see sdcMicro docs. When metric is not l_diversity, these rules return `applies: False` and the engine falls through to QR/MED/LOW rules.
+
 | Rule | Condition | Method | Params |
 |---|---|---|---|
-| CAT1 | ReID 15–40% + ≥70% categorical + no dominant categories | PRAM | p_change 0.25–0.35 |
-| CAT2 | ReID 15–50% + 50–70% categorical + ≥1 continuous | Pipeline: NOISE → PRAM | Split by type |
+| CAT1 | **l_diversity metric** + ReID 15–40% + ≥70% categorical + no dominant categories | PRAM | p_change 0.25–0.35 |
+| CAT2 | **l_diversity metric** + ReID 15–50% + 50–70% categorical + ≥1 continuous | Pipeline: NOISE → PRAM | Split by type |
 
 #### ReID Risk Pattern Rules (QR)
 
@@ -783,7 +785,7 @@ After the (possibly stepped-down) primary method succeeds, tries PRAM to see if 
 
 **Accept condition:** PRAM meets same targets AND utility gain > 3%
 
-**What it neutralises:** CAT1 70% threshold (datasets at 50-69% categorical), LOW1 10% gate, QR3/QR4 k overshoot. Thresholds still drive primary selection — challenge catches cases where PRAM would have been better.
+**What it neutralises:** CAT1 70% threshold (datasets at 50-69% categorical, l_diversity metric only), LOW1 10% gate, QR3/QR4 k overshoot. Thresholds still drive primary selection — challenge catches cases where PRAM would have been better.
 
 ---
 

@@ -223,7 +223,7 @@ The rules engine evaluates features in priority order (first match wins):
 1. **Pipeline rules** (P1-P6) -- multi-method combos for complex scenarios
 2. **Small dataset / structural risk rules** (HR6, SR3) -- special cases
 3. **Risk concentration rules** (RC1-RC4) -- based on backward elimination priorities
-4. **Categorical-aware rules** (CAT1-CAT2) -- PRAM for categorical-dominant data
+4. **Categorical-aware rules** (CAT1-CAT2) -- PRAM for categorical-dominant data (l_diversity metric only)
 5. **Data structure rules** (DS4-DS7) -- variable types (continuous-only, categorical-only, correlated, mixed)
 6. **ReID risk rules** (QR1-QR10) -- risk pattern + severity tier
 7. **Low-risk rules** (LOW1-LOW3) -- perturbation for already-safe data

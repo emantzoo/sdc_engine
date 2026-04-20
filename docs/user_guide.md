@@ -515,11 +515,13 @@ This is the most important distinction in SDC:
 
 The rules engine evaluates rules in priority order — **first match wins**. At a high level:
 
-1. **Pipelines** checked first (dynamic builder or legacy CAT2/P4/P5)
+1. **Pipelines** checked first (dynamic builder or legacy CAT2†/P4/P5)
 2. **Small dataset guard** (HR6: <200 rows → LOCSUPR k=3)
 3. **Structural rules** (SR3: near-unique QI with few QIs)
 4. **Risk concentration rules** (RC1–RC4) — when per-QI risk data is available and ReID95 >15%
-5. **Categorical / temporal / diversity rules** (CAT1, LDIV1, DATE1)
+5. **Categorical / temporal / diversity rules** (CAT1†, LDIV1, DATE1)
+
+> † CAT1, CAT2, and DYN_CAT are **metric-gated**: they only fire when the active metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness).
 6. **ReID-based rules** (QR0–QR4, MED1) — risk pattern drives method and k/p selection
 7. **Low-risk rules** (LOW1–LOW3) — type-based when ReID95 ≤20%
 8. **Distribution rules** (DP1–DP4) — outliers, skew, sensitive attributes, integer-coded categoricals
@@ -2318,7 +2320,7 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 
 | Rule | Condition | p_change |
 |------|-----------|----------|
-| CAT1 | ≥70% categorical, ReID95 15–40%, no near-constant QIs | 0.25–0.35 |
+| CAT1 | **l_diversity metric** + ≥70% categorical, ReID95 15–40%, no near-constant QIs | 0.25–0.35 |
 | LDIV1 | Sensitive column n_unique ≤5 + estimated min_l <2 (attribute disclosure risk) | 0.15 |
 | LDIV1+DATE1 | LDIV1 conditions + ≥80% temporal QIs — merged PRAM on sensitive + date cols | 0.20–0.25 |
 | DATE1 | ≥80% of QIs are temporal + ReID95 ≤40% (preserves temporal distributions) | 0.20–0.25 |
@@ -2361,7 +2363,7 @@ Pipelines run two or more methods sequentially when single methods are demonstra
 
 **Dynamic Pipeline Builder** — Assembles pipelines from data features rather than matching hardcoded patterns. Triggers when ReID95 >15% and mixed types benefit from multi-method treatment:
 
-1. **Categorical guard** — If ≥70% categorical, defers to CAT1 (PRAM). If 50–70% categorical with ≥1 continuous, builds DYN_CAT variant (NOISE + PRAM + optional LOCSUPR tail).
+1. **Categorical guard** — If ≥70% categorical and metric is `l_diversity`, defers to CAT1 (PRAM). If 50–70% categorical with ≥1 continuous and metric is `l_diversity`, builds DYN_CAT variant (NOISE + PRAM + optional LOCSUPR tail). Skipped when metric is reid_95/k_anonymity/uniqueness (PRAM invalidates these metrics).
 2. **GEO1** — If 2+ geographic QIs with both fine-grained (>50 unique) and coarse (≤50 unique), uses GENERALIZE (fine geos) → kANON.
 3. **kANON** added when ReID95 >20% (k=7 if ReID95 >40%, else k=5; strategy='hybrid')
 4. **NOISE** added when continuous QIs have outliers **and** kANON was not already added (magnitude scaled by risk level)
@@ -2373,7 +2375,7 @@ Note: kANON and NOISE are mutually exclusive in the dynamic builder — if kANON
 
 | Pipeline | Trigger | Method Sequence | Rationale |
 |----------|---------|-----------------|-----------|
-| **CAT2** | 50–70% categorical + ReID95 15–50% + ≥1 continuous | NOISE → PRAM | Split: numerics get noise, categoricals get perturbation. Parameters scale with risk (p_change 0.25–0.30, magnitude 0.15–0.20). |
+| **CAT2** | **l_diversity metric** + 50–70% categorical + ReID95 15–50% + ≥1 continuous | NOISE → PRAM | Split: numerics get noise, categoricals get perturbation. Parameters scale with risk (p_change 0.25–0.30, magnitude 0.15–0.20). Metric-gated: skipped for reid_95/k_anonymity/uniqueness. |
 | **P4b** | ≥2 skewed columns + sensitive attributes (diversity ≤10) + ≥2 QIs | kANON → PRAM | Structure for QIs, PRAM targets **sensitive columns** (not skewed QIs) |
 | **P4a** | ≥2 skewed columns + sensitive attributes (diversity >10) + ≥2 QIs | kANON only | High-diversity sensitive cols — no PRAM (would target wrong columns) |
 | **P5** | Density <5 (records/QI-space) + ≥200 rows + uniqueness >15% + ≥2 continuous + ≥2 categorical | NOISE → PRAM | Sparse mixed dataset — NOISE magnitude scaled by uniqueness (0.10–0.25). Datasets <200 rows deferred to HR6. |

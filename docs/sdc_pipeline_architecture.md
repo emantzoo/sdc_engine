@@ -211,11 +211,13 @@ evaluates rules in strict priority order — **first match wins**:
 
 | Priority | Group | Rules | Trigger |
 |---|---|---|---|
-| 1 | **Pipelines** | DYN, DYN_CAT, GEO1, CAT2, P4a, P4b, P5 | Multi-method needed; checked before all single-method rules |
+| 1 | **Pipelines** | DYN, DYN_CAT†, GEO1, CAT2†, P4a, P4b, P5 | Multi-method needed; checked before all single-method rules |
 | 2 | **Small dataset** | HR6 | <200 rows — structural constraint |
 | 3 | **Near-unique** | SR3 | ≤2 QIs + max uniqueness >70% |
 | 4 | **Risk concentration** | RC1–RC4 | var_priority available + ReID95 >15% |
-| 5 | **Type/diversity** | CAT1, LDIV1+DATE1, DP4 | Categorical dominant, l-diversity gap, temporal dominant, integer-coded |
+| 5 | **Type/diversity** | CAT1†, LDIV1+DATE1, DP4 | Categorical dominant, l-diversity gap, temporal dominant, integer-coded |
+
+> † **Metric-gated:** CAT1, CAT2, and DYN_CAT only fire when the active risk metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). When gated out, the engine falls through to QR/MED/LOW rules.
 | 6 | **ReID pattern** | QR0–QR4, MED1, MED1-high-supp | Risk distribution shape drives k/p |
 | 7 | **Low risk** | LOW1–LOW3 | ReID95 ≤20%, type-based |
 | 8 | **Distribution** | DP1–DP3 | Outliers, skewness, sensitive attributes |
@@ -276,8 +278,9 @@ suppression at that k would exceed 30%.
 The dynamic builder assembles pipelines from data features rather than matching hardcoded
 patterns:
 
-1. **Categorical guard** — ≥70% categorical: defer to CAT1 (PRAM). 50–70% categorical
-   with ≥1 continuous: build DYN_CAT (NOISE → PRAM, optional LOCSUPR tail).
+1. **Categorical guard** — ≥70% categorical: defer to CAT1 (PRAM, l_diversity metric only).
+   50–70% categorical with ≥1 continuous: build DYN_CAT (NOISE → PRAM, l_diversity metric
+   only). When metric is reid_95/k_anonymity/uniqueness, the categorical guard is skipped.
 2. **GEO1** — 2+ geographic QIs with both fine-grained and coarse levels:
    GENERALIZE (fine geos) → kANON.
 3. **kANON step** — added when ReID95 >20% (k=7 if >40%, else k=5, strategy=hybrid).

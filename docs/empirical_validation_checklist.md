@@ -42,17 +42,19 @@ All thresholds were tuned against Greek property/demographic datasets during dev
 
 **File:** `selection/rules.py` — `categorical_aware_rules()`
 
+> **Metric gate (Spec 12 F3a):** CAT1, CAT2, and DYN_CAT are gated to `l_diversity` metric only. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). When metric is not l_diversity, these rules return `applies: False`.
+
 | Threshold | Value | Routes to |
 |---|---|---|
-| CAT1 gate | cat_ratio ≥ 0.70 | PRAM p=0.25-0.35 |
-| CAT2 gate | 0.50 < cat_ratio < 0.70 | Pipeline: NOISE → PRAM |
-| Below 0.50 | — | Falls through to QR rules → kANON |
+| CAT1 gate | **l_diversity** + cat_ratio ≥ 0.70 | PRAM p=0.25-0.35 |
+| CAT2 gate | **l_diversity** + 0.50 < cat_ratio < 0.70 | Pipeline: NOISE → PRAM |
+| Below 0.50 or non-l_diversity metric | — | Falls through to QR rules → kANON |
 
-**What to test:** Datasets with 60%, 65%, 70%, 75% categorical QIs at moderate risk (ReID 15-30%). Compare PRAM vs kANON outcomes. Does PRAM outperform kANON at 65%? At 60%?
+**What to test:** Under l_diversity metric: datasets with 60%, 65%, 70%, 75% categorical QIs at moderate risk (ReID 15-30%). Compare PRAM vs kANON outcomes. Under reid_95/k_anonymity: verify CAT1 never fires.
 
-**Risk if wrong:** A dataset with 68% categorical QIs and ReID=25% misses CAT1, falls to QR4 → kANON k=7. PRAM might have achieved the same risk reduction with zero suppression and better utility. The retry engine's fallback chain includes PRAM, but it starts from kANON — wasting the primary attempt.
+**Risk if wrong:** Under l_diversity, a dataset with 68% categorical QIs and ReID=25% misses CAT1, falls to QR4 → kANON k=7. PRAM might have achieved the same risk reduction with zero suppression and better utility. Under reid_95, this is working as designed — PRAM would fragment equivalence classes and inflate the metric.
 
-**Current confidence:** Medium-high. 70% is conservative. PRAM works well even at 60% categorical if the categoricals have moderate cardinality. But lowering the threshold risks applying PRAM to datasets where the 30-40% continuous QIs really need structural protection.
+**Current confidence:** High for metric gate (confirmed against sdcMicro docs). Medium-high for 70% threshold under l_diversity.
 
 ---
 
