@@ -486,6 +486,7 @@ def _meets_targets(
     t_target: Optional[float] = None,
     sensitive_columns: Optional[List[str]] = None,
     quasi_identifiers: Optional[List[str]] = None,
+    k_target: Optional[int] = None,
 ) -> bool:
     """Check if result meets ReID target and optional privacy targets.
 
@@ -496,12 +497,26 @@ def _meets_targets(
     t_target : float or None
         Maximum t-closeness distance. None = disabled.
     sensitive_columns, quasi_identifiers : needed for l/t checks.
+    k_target : int or None
+        Minimum k-anonymity. When set (risk_metric='k_anonymity'),
+        checks that all equivalence classes have >= k_target records.
     """
     if not result or not result.success:
         return False
     reid = result.reid_after.get('reid_95', 1) if result.reid_after else 1
     if reid > reid_target:
         return False
+
+    # k-anonymity gate: when metric is k_anonymity, check actual min_k
+    if k_target and quasi_identifiers and result.protected_data is not None:
+        try:
+            from sdc_engine.sdc.metrics.risk import check_kanonymity
+            is_k, gs, _ = check_kanonymity(
+                result.protected_data, quasi_identifiers, k=k_target)
+            if not is_k:
+                return False
+        except Exception:
+            pass  # Don't block on check failure
 
     # Optional privacy gates (only when sensitive columns are assigned)
     if sensitive_columns and quasi_identifiers and result.protected_data is not None:
@@ -1276,11 +1291,13 @@ def run_rules_engine_protection(
             _effective_l_target = None
 
     # Build kwargs dict for _meets_targets (avoids repetition at 11 call sites)
+    _k_target = int(risk_target_raw) if risk_metric == 'k_anonymity' and risk_target_raw else None
     _privacy_kw: Dict[str, Any] = {
         'l_target': _effective_l_target,
         't_target': _effective_t_target,
         'sensitive_columns': sensitive_columns,
         'quasi_identifiers': quasi_identifiers,
+        'k_target': _k_target,
     }
 
     # Inject qi_treatment so rules can apply treatment balance
@@ -1371,13 +1388,19 @@ def run_rules_engine_protection(
         smart_config=smart_cfg)
     suite['primary_params'] = primary_params
 
-    # Apply kANON smart starting_k if available
+    # Apply kANON smart starting_k if available.
+    # Skip when risk_metric is k_anonymity: the rule's k IS the target,
+    # so starting lower would prevent achieving the required k.
     if primary == 'kANON' and smart_cfg.get('starting_k'):
         smart_k = smart_cfg['starting_k']
-        if smart_k != primary_params.get('k'):
+        _is_k_metric = risk_metric == 'k_anonymity'
+        if smart_k != primary_params.get('k') and not _is_k_metric:
             log.info("[Protection] Smart starting k: %d (was %s)",
                      smart_k, primary_params.get('k'))
             primary_params['k'] = smart_k
+        elif _is_k_metric:
+            log.info("[Protection] Skipping smart starting_k=%d (k_anonymity metric "
+                     "requires k=%s)", smart_k, primary_params.get('k'))
 
     # Starting ReID for smart escalation
     reid_current = data_features.get('reid_95', 1.0)

@@ -607,9 +607,9 @@ def _generalize_column(series: pd.Series, col_name: str, gen_config: Dict, level
                 _std_ct = np.std(_range_counts) if len(_range_counts) > 1 else 0
                 _cv = _std_ct / _mean_ct if _mean_ct > 0 else 0
                 # CV < 0.3 = uniform → floor at 5; CV > 1.0 = very skewed → floor at 8
-                _dynamic_floor = int(np.clip(5 + _cv * 4, 5, 10))
+                _dynamic_floor = int(np.clip(3 + _cv * 4, 3, 8))
             else:
-                _dynamic_floor = 5
+                _dynamic_floor = 3
 
             # Cap floor: never prevent all merging — allow at least halving
             _dynamic_floor = min(_dynamic_floor, max(3, len(sorted_ranges) // 2))
@@ -661,7 +661,7 @@ def _generalize_column(series: pd.Series, col_name: str, gen_config: Dict, level
         )
 
         if not skip_truncation:
-            _TRUNC_FLOOR = 5
+            _TRUNC_FLOOR = 3
             if string_method == 'suppress':
                 return pd.Series(['*'] * len(series), index=series.index)
 
@@ -796,21 +796,28 @@ def _achieve_kanon_generalization(
     # Each QI gets the nth root of max_combo as its cardinality target
     # This distributes the budget equally across QIs
     target_per_qi = int(max_combo ** (1.0 / n_qis)) if n_qis > 0 else 10
-    # Global minimum: never go below 5 categories (was 3)
-    _GLOBAL_MIN = 5
+    # Global minimum: never go below 3 categories (was 5 — too conservative
+    # for k=5 targets; 5^n_qis creates too many equivalence classes)
+    _GLOBAL_MIN = 3
     # Pre-binned range columns get a higher floor
-    _RANGE_MIN = max(5, target_per_qi)
+    _RANGE_MIN = max(3, target_per_qi)
     target_per_qi = max(_GLOBAL_MIN, target_per_qi)
 
     # qi_cardinality_targets stores the MINIMUM categories (floor) each QI
     # should retain.  Budget-aware: high-cardinality QIs get a higher floor
     # (up to target_per_qi) so they don't over-generalize, while low-card
-    # QIs use _GLOBAL_MIN.
+    # QIs (already ≤ target_per_qi) use _GLOBAL_MIN so they can still be
+    # generalized.
     qi_cardinality_targets = {}
     for qi in quasi_identifiers:
         qi_card = protected_data[qi].nunique()
-        # Floor = min(target_per_qi, current cardinality) but never below _GLOBAL_MIN
-        qi_cardinality_targets[qi] = max(_GLOBAL_MIN, min(target_per_qi, qi_card))
+        if qi_card <= target_per_qi:
+            # Low-cardinality QI: floor at _GLOBAL_MIN so it can generalize
+            qi_cardinality_targets[qi] = _GLOBAL_MIN
+        else:
+            # High-cardinality QI: floor at target_per_qi to prevent
+            # over-generalization
+            qi_cardinality_targets[qi] = target_per_qi
 
     combo_product = 1
     for qi in quasi_identifiers:
@@ -829,10 +836,10 @@ def _achieve_kanon_generalization(
     prev_violations = None
     stall_count = 0
     # Fewer stall retries for large datasets (each iteration is expensive)
-    max_stalls = 2 if len(protected_data) > 10_000 else 3
+    max_stalls = 3 if len(protected_data) > 10_000 else 5
     _gen_t0 = _time.monotonic()
-    # Time budget: 8s base + 0.5s per 10K rows, max 20s
-    _gen_time_budget = min(20, 8 + len(protected_data) / 20_000)
+    # Time budget: 12s base + 0.5s per 10K rows, max 30s
+    _gen_time_budget = min(30, 12 + len(protected_data) / 20_000)
 
     while iteration < max_iterations:
         # Check current k-anonymity status
@@ -916,7 +923,7 @@ def _achieve_kanon_generalization(
                 high_card_qis = [
                     qi for qi in quasi_identifiers
                     if generalization_levels[qi] < per_qi_max_levels.get(qi, max_levels)
-                    and protected_data[qi].nunique() > k * 2
+                    and protected_data[qi].nunique() > k
                 ]
                 if high_card_qis:
                     log.info(
