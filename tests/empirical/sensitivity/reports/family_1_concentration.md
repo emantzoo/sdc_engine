@@ -103,7 +103,7 @@ suppress fewer records.
 
 ### Finding 3: RC rules have very narrow activation scope in production
 
-**Real dataset verification** (3 datasets, 3 paths each):
+**Real dataset verification** (3 datasets, 3 paths each: natural, dominated, balanced):
 
 | Dataset | Rows | QIs | reid_95 | var_priority | pattern | Outcome |
 |---------|------|-----|---------|-------------|---------|---------|
@@ -122,11 +122,14 @@ On the one dataset where var_priority IS populated organically (testdata,
 counterfactual override — the retry engine normalizes the starting-point
 differences.
 
-**Implication:** The Finding 2 tradeoff is moot for most production
-datasets. RC rules are effectively unreachable for datasets > 10K rows.
-For smaller datasets where RC rules do fire, the retry engine absorbs
-the routing differences. The RC rule outcomes observed in synthetic data
-(Cluster B) do not appear on real data.
+**Implication:** RC rules were unreachable on 2 of 3 real datasets
+tested, both exceeding 10K rows, due to the `max_n_records=10,000`
+guard. This suggests RC rules may be unreachable on most production-scale
+datasets, though a wider survey would be needed to confirm. On the one
+small dataset where RC rules do fire (testdata, 4580 rows), the retry
+engine absorbs routing differences — all paths converge to the same
+outcome. The Pareto tradeoff observed in synthetic data (Finding 2)
+does not appear on real data.
 
 ### Finding 4: Mathematical floor on reid reduction
 
@@ -181,10 +184,11 @@ warranted** because:
 
 ### What we discovered
 
-- **RC rules are effectively dead code for datasets > 10K rows.**
-  The `max_n_records=10,000` guard in `_compute_var_priority()` prevents
-  backward elimination (and thus var_priority population) on larger datasets.
-  Without var_priority, RC rules never fire.
+- **RC rules were unreachable on 2 of 3 real datasets tested** (both
+  exceeding 10K rows). The `max_n_records=10,000` guard in
+  `_compute_var_priority()` prevents backward elimination on larger
+  datasets, leaving var_priority empty and RC rules dormant. A wider
+  survey would be needed to confirm this is universal.
 - **On small datasets where RC rules DO fire, the retry engine absorbs
   routing differences.** testdata (4580 rows) produces the same outcome
   regardless of counterfactual.
@@ -196,11 +200,24 @@ warranted** because:
 ### Recommendations
 
 1. **No threshold changes.** The boundaries work as designed.
-2. **Consider raising `max_n_records` above 10K** if RC rules are intended
-   to be production-active. Currently they're unreachable for most datasets.
-   This is a performance/coverage tradeoff worth a design decision.
-3. **Future calibration studies** should jointly test all four concentration
-   patterns and use real datasets with organic correlation structure.
+2. **The `max_n_records=10,000` threshold warrants investigation as a
+   follow-up (potential Spec 14).** Before raising it, three questions
+   need answers: (a) what is the actual performance cost of
+   `_compute_var_priority` on larger datasets, (b) would sampled
+   var_priority produce the same pattern classification as full
+   computation, and (c) would activating RC rules on large datasets
+   improve outcomes compared to current fallthrough behavior. Current
+   engine outcomes on large real datasets are already excellent
+   (adult_mid: reid=0.039, util=0.993), so the case for raising the
+   threshold is not obvious.
+3. **Future calibration studies** should jointly test all four
+   concentration patterns and use real datasets with organic correlation
+   structure. Given Findings 2 and 3, it is unclear whether the 40%/60%
+   thresholds are empirically calibratable — RC rules rarely fire on
+   real data, and where they do fire (synthetic or small real datasets),
+   outcomes are Pareto-incomparable with fallthrough paths. Future work
+   may conclude that threshold calibration is not the right frame for
+   evaluating the rules engine's risk concentration tier.
 
 ### Numbers
 
