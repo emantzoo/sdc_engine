@@ -172,6 +172,17 @@ def build_data_features(
         else:
             qi_type_counts['categorical'] += 1
 
+    # Geographic QI granularity classification (for GEO1 pipeline)
+    n_geo_qis = qi_type_counts['geo']
+    geo_qis_by_granularity = {}
+    for qi in quasi_identifiers:
+        if qi not in data.columns:
+            continue
+        name_lower = qi.lower()
+        if any(h in name_lower for h in _geo_hints):
+            card = data[qi].nunique()
+            geo_qis_by_granularity[qi] = 'fine' if card > 50 else 'coarse'
+
     # Per-QI max category frequency (for categorical-aware rule selection)
     qi_max_cat_freq = {}
     for qi in quasi_identifiers:
@@ -312,6 +323,8 @@ def build_data_features(
         'max_qi_uniqueness': max_qi_uniqueness,
         'integer_coded_qis': integer_coded_qis,
         'qi_type_counts': qi_type_counts,
+        'n_geo_qis': n_geo_qis,
+        'geo_qis_by_granularity': geo_qis_by_granularity,
         'uniqueness_rate': uniqueness,
         'has_outliers': has_outliers,
         'skewed_columns': skewed_cols,
