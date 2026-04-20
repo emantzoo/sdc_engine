@@ -257,6 +257,17 @@ def build_data_features(
     else:
         uniqueness = 0
 
+    # Sensitive column diversity (for LDIV1: l-diversity gap detection)
+    sensitive_column_diversity = None
+    if sensitive_columns:
+        min_div = None
+        for sc in sensitive_columns:
+            if sc in data.columns:
+                nu = data[sc].nunique()
+                if min_div is None or nu < min_div:
+                    min_div = nu
+        sensitive_column_diversity = min_div
+
     # Risk pattern classification
     reid_50 = reid.get('reid_50', 0)
     reid_95 = reid.get('reid_95', 0)
@@ -330,6 +341,7 @@ def build_data_features(
         'skewed_columns': skewed_cols,
         'has_sensitive_attributes': False,
         'sensitive_columns': {},
+        'sensitive_column_diversity': sensitive_column_diversity,
         'has_reid': True,
         'reid_50': reid_50,
         'reid_95': reid_95,
