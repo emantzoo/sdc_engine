@@ -473,8 +473,14 @@ def select_method_suite(
     _trace = [] if _audit else None  # None = audit off, list = collecting
     _winner = None  # first matching result (what we'd return normally)
 
+    # Pass audit flag to rule functions via features so they can return
+    # sub-rule-level trace data without importing the flag themselves.
+    if _audit:
+        features['_audit'] = True
+
     def _record_trace(rule_name, applies, method_or_pipeline, *,
-                      blocked=False, blocked_reason=''):
+                      blocked=False, blocked_reason='',
+                      sub_rules=None):
         """Append one entry to the audit trace (no-op when audit off)."""
         if _trace is None:
             return
@@ -486,6 +492,8 @@ def select_method_suite(
         if blocked:
             entry['blocked'] = True
             entry['blocked_reason'] = blocked_reason
+        if sub_rules:
+            entry['sub_rules'] = sub_rules
         _trace.append(entry)
 
     # Check pipeline rules first
@@ -582,9 +590,11 @@ def select_method_suite(
                     log.info("[MethodSuite] Skipping pipeline rule %s — "
                              "blocked by metric %s", rule.get('rule', '?'), risk_metric)
                     _record_trace(rule.get('rule', '?'), True, pipeline,
-                                  blocked=True, blocked_reason=f'metric={risk_metric}')
+                                  blocked=True, blocked_reason=f'metric={risk_metric}',
+                                  sub_rules=rule.get('_sub_rule_trace'))
                     continue
-                _record_trace(rule.get('rule', '?'), True, pipeline)
+                _record_trace(rule.get('rule', '?'), True, pipeline,
+                              sub_rules=rule.get('_sub_rule_trace'))
                 if _winner is not None:
                     continue  # audit mode: already have winner, just recording
 
@@ -622,10 +632,12 @@ def select_method_suite(
                          "blocked by metric %s or user-excluded",
                          rule.get('rule', '?'), rule.get('method', '?'), risk_metric)
                 _record_trace(rule.get('rule', '?'), True, rule.get('method'),
-                              blocked=True, blocked_reason=f'metric={risk_metric}')
+                              blocked=True, blocked_reason=f'metric={risk_metric}',
+                              sub_rules=rule.get('_sub_rule_trace'))
                 continue
 
-            _record_trace(rule.get('rule', '?'), True, rule.get('method'))
+            _record_trace(rule.get('rule', '?'), True, rule.get('method'),
+                          sub_rules=rule.get('_sub_rule_trace'))
             if _winner is not None:
                 continue  # audit mode: already have winner, just recording
 
@@ -710,8 +722,9 @@ def select_method_suite(
             _winner = _result
             continue
 
-        # Rule didn't apply
-        _record_trace(rule_fn.__name__, False, None)
+        # Rule didn't apply — still capture sub-rule trace if available
+        _record_trace(rule_fn.__name__, False, None,
+                      sub_rules=rule.get('_sub_rule_trace'))
 
     # If we reach here with a winner (audit mode), attach trace and return
     if _winner is not None:

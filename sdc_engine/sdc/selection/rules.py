@@ -374,11 +374,36 @@ def risk_concentration_rules(features: Dict) -> Dict:
     top_pct = risk_conc.get('top_pct', 0)
     top2_pct = risk_conc.get('top2_pct', 0)
     n_high = risk_conc.get('n_high_risk', 0)
+    n_other = len(qis) - n_high  # includes MODERATE and LOW
+
+    _audit = features.get('_audit', False)
+
+    # Evaluate each sub-rule's gate condition independently
+    rc1_match = (pattern == 'dominated')
+    rc2_match = (pattern == 'concentrated')
+    rc3_match = (pattern == 'spread_high')
+    rc4_match = (n_high == 1 and n_other >= 3 and reid_95 > 0.15
+                 and pattern == 'balanced')
+
+    # Build sub-rule trace (audit mode only)
+    _sub_trace = None
+    if _audit:
+        _sub_trace = [
+            {'rule': 'RC1_Risk_Dominated', 'applies': rc1_match,
+             'gate': f'pattern==dominated (actual={pattern}, top_pct={top_pct:.1f}%)'},
+            {'rule': 'RC2_Risk_Concentrated', 'applies': rc2_match,
+             'gate': f'pattern==concentrated (actual={pattern}, top_pct={top_pct:.1f}%, top2_pct={top2_pct:.1f}%)'},
+            {'rule': 'RC3_Risk_Spread_High', 'applies': rc3_match,
+             'gate': f'pattern==spread_high (actual={pattern}, n_high={n_high})'},
+            {'rule': 'RC4_Single_Bottleneck', 'applies': rc4_match,
+             'gate': (f'pattern==balanced AND n_high==1 AND n_other>=3 '
+                      f'(actual: pattern={pattern}, n_high={n_high}, n_other={n_other})')},
+        ]
 
     # RC1: Dominated — one QI accounts for ≥40% of risk.
     # Targeted suppression beats global k-anonymity here.
-    if pattern == 'dominated':
-        return {
+    if rc1_match:
+        result = {
             'applies': True,
             'rule': 'RC1_Risk_Dominated',
             'method': 'LOCSUPR',
@@ -396,12 +421,15 @@ def risk_concentration_rules(features: Dict) -> Dict:
             },
             'utility_fallback': None,
         }
+        if _sub_trace:
+            result['_sub_rule_trace'] = _sub_trace
+        return result
 
     # RC2: Concentrated — top 2 QIs account for ≥60% of risk.
     # Hybrid k-anonymity lets risk-weighted preprocessing handle the heavy QIs.
-    if pattern == 'concentrated':
+    if rc2_match:
         k = _clamp_k_by_suppression(features, 5)
-        return {
+        result = {
             'applies': True,
             'rule': 'RC2_Risk_Concentrated',
             'method': 'kANON',
@@ -422,12 +450,15 @@ def risk_concentration_rules(features: Dict) -> Dict:
                 'parameters': {'quasi_identifiers': qis, 'k': 5},
             },
         }
+        if _sub_trace:
+            result['_sub_rule_trace'] = _sub_trace
+        return result
 
     # RC3: Spread-high — 3+ QIs flagged HIGH risk.
     # Risk is wide — need aggressive structural protection.
-    if pattern == 'spread_high':
+    if rc3_match:
         k = _clamp_k_by_suppression(features, 10 if reid_95 > 0.40 else 7)
-        return {
+        result = {
             'applies': True,
             'rule': 'RC3_Risk_Spread_High',
             'method': 'kANON',
@@ -447,18 +478,20 @@ def risk_concentration_rules(features: Dict) -> Dict:
                 'parameters': {'quasi_identifiers': qis, 'k': max(5, k - 2), 'strategy': 'hybrid'},
             },
         }
+        if _sub_trace:
+            result['_sub_rule_trace'] = _sub_trace
+        return result
 
     # RC4: Single HIGH QI bottleneck + many LOW QIs
     # Targeted GENERALIZE on the bottleneck QI → light kANON on the rest.
     # Distinct from RC1 which requires top QI ≥40% risk — RC4 uses HIGH label count.
-    n_other = len(qis) - n_high  # includes MODERATE and LOW
-    if n_high == 1 and n_other >= 3 and reid_95 > 0.15:
+    if rc4_match:
         high_qi_name = next(
             (qi for qi, (label, _) in var_priority.items()
              if 'HIGH' in label and 'MED' not in label),
             top_qi,
         )
-        return {
+        result = {
             'applies': True,
             'rule': 'RC4_Single_Bottleneck',
             'use_pipeline': True,
@@ -483,9 +516,15 @@ def risk_concentration_rules(features: Dict) -> Dict:
             'confidence': 'HIGH',
             'priority': 'REQUIRED',
         }
+        if _sub_trace:
+            result['_sub_rule_trace'] = _sub_trace
+        return result
 
     # Balanced pattern — no special action, let generic ReID rules handle it
-    return {'applies': False}
+    result = {'applies': False}
+    if _sub_trace:
+        result['_sub_rule_trace'] = _sub_trace
+    return result
 
 
 def data_structure_rules(features: Dict) -> Dict:

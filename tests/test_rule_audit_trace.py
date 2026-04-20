@@ -171,27 +171,88 @@ class TestAuditFlagOn:
         )
 
     def test_config_blocked_marked(self):
-        """Rules blocked by METRIC_ALLOWED_METHODS should have blocked=True."""
-        # Use l_diversity metric — DYN_CAT pipeline uses NOISE which is
-        # blocked for l_diversity. The pipeline should match but be blocked.
+        """Rules blocked by METRIC_ALLOWED_METHODS should have blocked=True.
+
+        SEC1_Secure_Categorical selects PRAM, which is blocked under
+        k_anonymity.  Features are crafted so SEC1's gate matches
+        (SECURE tier, reid_95 in 5-25%, cat_ratio >= 60%, utility_floor >= 90%),
+        but the method is rejected by the metric filter.
+        """
         features = _minimal_features(
-            _risk_metric_type='l_diversity',
-            reid_95=0.25,
-            cat_ratio=0.55,   # 50-70% categorical triggers DYN_CAT
+            _risk_metric_type='k_anonymity',
+            _utility_floor=0.92,
+            reid_95=0.15,
             n_categorical=3,
-            n_continuous=2,
+            n_continuous=1,
             categorical_vars=['sex', 'education', 'marital'],
-            continuous_vars=['age', 'income'],
+            continuous_vars=['age'],
+            cat_ratio=0.75,
+        )
+        suite = pipelines.select_method_suite(
+            features, access_tier='SECURE', verbose=False)
+        trace = suite['_rule_trace']
+
+        blocked = [e for e in trace if e.get('blocked')]
+        assert len(blocked) > 0, (
+            f"Expected at least one blocked entry under k_anonymity, "
+            f"got none. Trace rules: {[e['rule'] for e in trace]}"
+        )
+        # Find the SEC1 blocked entry specifically
+        sec1_blocked = [e for e in blocked
+                        if 'SEC1' in str(e.get('rule', ''))]
+        assert len(sec1_blocked) > 0, (
+            f"Expected SEC1 to be blocked under k_anonymity. "
+            f"Blocked entries: {blocked}"
+        )
+        for entry in blocked:
+            assert 'blocked_reason' in entry
+            assert 'metric' in entry['blocked_reason']
+
+    def test_rc_sub_rule_trace(self):
+        """RC rules should include sub_rules with per-sub-rule gate details."""
+        features = _minimal_features(
+            reid_95=0.30,
+            var_priority={
+                'age': ('HIGH', 75.0),
+                'sex': ('LOW', 1.2),
+                'education': ('LOW', 2.1),
+            },
+            risk_concentration={
+                'pattern': 'dominated',
+                'top_qi': 'age',
+                'top_pct': 75.0,
+                'top2_pct': 76.2,
+                'n_high_risk': 1,
+            },
         )
         suite = pipelines.select_method_suite(features, verbose=False)
         trace = suite['_rule_trace']
 
-        blocked = [e for e in trace if e.get('blocked')]
-        # DYN_CAT uses NOISE, blocked for l_diversity
-        # May or may not appear depending on pipeline_rules internals
-        # At minimum, verify the trace structure is correct
-        for entry in blocked:
-            assert 'blocked_reason' in entry
+        # Find the risk_concentration entry
+        rc_entries = [e for e in trace
+                      if 'RC' in str(e.get('rule', ''))
+                      or e.get('rule', '') == 'risk_concentration_rules']
+        assert len(rc_entries) > 0, (
+            f"Expected RC entry in trace. Rules: {[e['rule'] for e in trace]}"
+        )
+
+        rc_entry = rc_entries[0]
+        assert 'sub_rules' in rc_entry, (
+            f"Expected sub_rules in RC entry: {rc_entry}"
+        )
+        sub_rules = rc_entry['sub_rules']
+        assert len(sub_rules) == 4, f"Expected 4 RC sub-rules, got {len(sub_rules)}"
+
+        # RC1 should apply (dominated), RC2-RC4 should not
+        names = {s['rule']: s['applies'] for s in sub_rules}
+        assert names['RC1_Risk_Dominated'] is True
+        assert names['RC2_Risk_Concentrated'] is False
+        assert names['RC3_Risk_Spread_High'] is False
+        assert names['RC4_Single_Bottleneck'] is False
+
+        # Each sub-rule should have a gate description
+        for s in sub_rules:
+            assert 'gate' in s, f"Missing gate in sub-rule: {s}"
 
     def test_pipeline_winner_still_traces_all_factories(self):
         """When pipeline wins, trace should still include all rule factories."""
