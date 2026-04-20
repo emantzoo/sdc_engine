@@ -152,6 +152,26 @@ def build_data_features(
                 if len(non_null) > 0 and (non_null == non_null.astype(int)).all():
                     integer_coded_qis.append(qi)
 
+    # QI type counts (for DATE1: date-dominant detection)
+    _date_hints = {'date', 'time', 'year', 'month', 'quarter', 'period',
+                   'day', 'ημερομηνια', 'ημερομηνία', 'ετος', 'έτος'}
+    _geo_hints = {'region', 'city', 'state', 'country', 'zip', 'postal',
+                  'county', 'district', 'municipality', 'prefecture',
+                  'νομος', 'νομός', 'περιφερεια', 'περιφέρεια', 'δημος', 'δήμος'}
+    qi_type_counts = {'date': 0, 'geo': 0, 'numeric': 0, 'categorical': 0}
+    for qi in quasi_identifiers:
+        if qi not in data.columns:
+            continue
+        name_lower = qi.lower()
+        if any(h in name_lower for h in _date_hints):
+            qi_type_counts['date'] += 1
+        elif any(h in name_lower for h in _geo_hints):
+            qi_type_counts['geo'] += 1
+        elif pd.api.types.is_numeric_dtype(data[qi]):
+            qi_type_counts['numeric'] += 1
+        else:
+            qi_type_counts['categorical'] += 1
+
     # Per-QI max category frequency (for categorical-aware rule selection)
     qi_max_cat_freq = {}
     for qi in quasi_identifiers:
@@ -291,6 +311,7 @@ def build_data_features(
         'recommended_qi_to_remove': None,
         'max_qi_uniqueness': max_qi_uniqueness,
         'integer_coded_qis': integer_coded_qis,
+        'qi_type_counts': qi_type_counts,
         'uniqueness_rate': uniqueness,
         'has_outliers': has_outliers,
         'skewed_columns': skewed_cols,
