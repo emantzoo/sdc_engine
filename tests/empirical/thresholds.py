@@ -71,6 +71,11 @@ def _patch_cat1_ratio(value: float):
     def patched(features):
         if not features.get('has_reid'):
             return {'applies': False}
+        # PRAM invalidates frequency-count-based risk metrics — gate must
+        # match categorical_aware_rules() in rules.py.
+        risk_metric = features.get('_risk_metric_type', 'reid95')
+        if risk_metric not in ('l_diversity',):
+            return {'applies': False}
         n_cat = features.get('n_categorical', 0)
         n_cont = features.get('n_continuous', 0)
         total = n_cat + n_cont

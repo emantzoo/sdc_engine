@@ -169,32 +169,55 @@ class TestRiskConcentrationRules:
 class TestCategoricalAwareRules:
     """CAT1, DYN_CAT pipeline, and the dominance guard."""
 
-    def test_cat1_fires_on_categorical_dominant(self):
-        """cat_ratio >= 0.70, reid_95 in [0.15, 0.40], no dominance → CAT1 PRAM."""
+    def test_cat1_gated_for_reid95(self):
+        """CAT1 must NOT fire when risk_metric is reid95 (default).
+
+        PRAM invalidates frequency-count-based risk metrics like reid_95.
+        sdcMicro: "Risk measures based on frequency counts of keys are
+        no longer valid after perturbative methods."
+        """
         df, qis, _ = build_cat1_dataset()
         suite, features = get_suite(df, qis)
+        assert 'CAT1' not in suite['rule_applied'], \
+            f"CAT1 should be gated for reid95; got {suite['rule_applied']}"
+        assert suite['primary'] != 'PRAM', \
+            f"PRAM should not be selected as primary for reid95; got {suite['primary']}"
+
+    def test_cat1_fires_for_l_diversity(self):
+        """CAT1 fires when risk_metric is l_diversity (attribute disclosure)."""
+        df, qis, _ = build_cat1_dataset()
+        suite, features = get_suite(
+            df, qis, feature_overrides={'_risk_metric_type': 'l_diversity'})
         assert suite['rule_applied'] == 'CAT1_Categorical_Dominant', \
-            f"Expected CAT1_Categorical_Dominant, got {suite['rule_applied']}"
+            f"Expected CAT1_Categorical_Dominant for l_diversity, got {suite['rule_applied']}"
         assert suite['primary'] == 'PRAM'
 
     def test_cat1_blocked_by_dominance_guard(self):
-        """One category >= 80% → CAT1 must NOT fire."""
+        """One category >= 80% → CAT1 must NOT fire (even for l_diversity)."""
         df, qis, _ = build_cat1_blocked_by_dominance()
-        suite, features = get_suite(df, qis)
+        suite, features = get_suite(
+            df, qis, feature_overrides={'_risk_metric_type': 'l_diversity'})
         assert _has_dominant_categories(features), \
             "Dataset should have dominant categories (max freq >= 0.80)"
         assert 'CAT1' not in suite['rule_applied'], \
             f"CAT1 should be blocked by dominance guard; got {suite['rule_applied']}"
 
-    def test_dyn_cat_pipeline_fires_on_mixed_categorical(self):
-        """cat_ratio in (0.50, 0.70), reid_95 > 0.15 → DYN_CAT_Pipeline."""
+    def test_dyn_cat_pipeline_gated_for_reid95(self):
+        """DYN_CAT pipeline must NOT fire when risk_metric is reid95."""
         df, qis, _ = build_cat2_dataset()
         suite, features = get_suite(df, qis)
-        assert suite['rule_applied'] == 'DYN_CAT_Pipeline', \
-            f"Expected DYN_CAT_Pipeline, got {suite['rule_applied']}"
-        # DYN_CAT produces a pipeline
-        assert suite.get('use_pipeline'), \
-            "DYN_CAT should set use_pipeline=True"
+        assert suite['rule_applied'] != 'DYN_CAT_Pipeline', \
+            f"DYN_CAT_Pipeline should be gated for reid95; got {suite['rule_applied']}"
+
+    def test_dyn_cat_pipeline_blocked_for_l_diversity_by_noise(self):
+        """DYN_CAT pipeline is [NOISE, PRAM] — NOISE blocked for l_diversity metric."""
+        df, qis, _ = build_cat2_dataset()
+        suite, features = get_suite(
+            df, qis, feature_overrides={'_risk_metric_type': 'l_diversity'})
+        # NOISE is not in METRIC_ALLOWED_METHODS['l_diversity'], so the
+        # pipeline is rejected by _all_allowed even though PRAM is allowed.
+        assert suite['rule_applied'] != 'DYN_CAT_Pipeline', \
+            f"DYN_CAT_Pipeline should be blocked (NOISE not allowed for l_diversity)"
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -328,21 +351,24 @@ class TestRulePriority:
         assert 'SR3' in suite['rule_applied'], \
             f"SR3 should fire before QR rules, got {suite['rule_applied']}"
 
-    def test_cat1_fires_before_reid_risk_rules(self):
-        """CAT1 (priority 3) fires before QR/MED1 (priority 4)."""
+    def test_cat1_fires_before_reid_risk_rules_for_l_diversity(self):
+        """CAT1 (priority 3) fires before QR/MED1 (priority 4) under l_diversity."""
         df, qis, _ = build_cat1_dataset()
-        suite, features = get_suite(df, qis)
+        suite, features = get_suite(
+            df, qis, feature_overrides={'_risk_metric_type': 'l_diversity'})
         # CAT1 should fire — if QR2 or MED1 fired instead, priority is wrong
         assert 'CAT1' in suite['rule_applied'], \
             f"CAT1 should fire before reid_risk rules, got {suite['rule_applied']}"
 
-    def test_pipeline_rules_fire_before_rule_factories(self):
-        """DYN_CAT pipeline (checked first) beats CAT2 in rule_factories."""
+    def test_dyn_cat_pipeline_gated_and_cat2_also_gated_for_reid95(self):
+        """Both DYN_CAT and CAT2 gated for reid95 — falls through to other rules."""
         df, qis, _ = build_cat2_dataset()
         suite, features = get_suite(df, qis)
-        # DYN_CAT_Pipeline fires from pipeline_rules (before CAT2 in rule_factories)
-        assert suite['rule_applied'] == 'DYN_CAT_Pipeline', \
-            f"Pipeline should fire before rule_factories CAT2, got {suite['rule_applied']}"
+        # DYN_CAT uses PRAM, CAT2 uses PRAM — both gated for reid95
+        assert 'DYN_CAT' not in suite['rule_applied'], \
+            f"DYN_CAT should be gated for reid95, got {suite['rule_applied']}"
+        assert 'CAT2' not in suite['rule_applied'], \
+            f"CAT2 should be gated for reid95, got {suite['rule_applied']}"
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -489,16 +515,23 @@ class TestContextAwarePriority:
     """Verify context-aware rules fire at the correct priority."""
 
     def test_pub1_fires_before_cat1(self):
-        """PUB1 (before CAT) should fire instead of CAT1 under PUBLIC tier."""
+        """PUB1 (before CAT) should fire instead of CAT1 under PUBLIC tier.
+
+        Both tested under l_diversity where CAT1 is active.
+        """
         df, qis, _ = build_cat1_dataset()
-        # Under SCIENTIFIC, CAT1 fires. Under PUBLIC, PUB1 should preempt it.
-        suite_sci, _ = get_suite(df, qis, access_tier='SCIENTIFIC')
+        # Under SCIENTIFIC + l_diversity, CAT1 fires.
+        # Under PUBLIC + l_diversity, PUB1 should preempt it.
+        suite_sci, _ = get_suite(
+            df, qis, access_tier='SCIENTIFIC',
+            feature_overrides={'_risk_metric_type': 'l_diversity'})
         suite_pub, _ = get_suite(
             df, qis, access_tier='PUBLIC',
-            feature_overrides={'_reid_target_raw': 0.01, '_utility_floor': 0.85},
+            feature_overrides={'_reid_target_raw': 0.01, '_utility_floor': 0.85,
+                               '_risk_metric_type': 'l_diversity'},
         )
         assert 'CAT1' in suite_sci['rule_applied'], \
-            f"Under SCIENTIFIC, CAT1 should fire; got {suite_sci['rule_applied']}"
+            f"Under SCIENTIFIC + l_diversity, CAT1 should fire; got {suite_sci['rule_applied']}"
         assert 'PUB1' in suite_pub['rule_applied'], \
             f"Under PUBLIC, PUB1 should preempt CAT1; got {suite_pub['rule_applied']}"
 

@@ -56,16 +56,17 @@ def build_dynamic_pipeline(features: Dict) -> Dict:
     has_outliers = features.get('has_outliers', False)
     high_risk_rate = features.get('high_risk_rate', 0)
 
-    # Categorical guard: let CAT1/CAT2 in the single-method chain handle
-    # categorical-dominant data — they select PRAM which preserves more records.
+    # Categorical guard: categorical-dominant data is handled by CAT1
+    # (when metric is l_diversity) or falls through to reid_risk_rules.
     total_vars = n_cat + n_cont
     if total_vars > 0:
         cat_ratio = n_cat / total_vars
         if cat_ratio >= 0.70:
             log.info("[Pipeline] Skipping dynamic pipeline — cat_ratio=%.0f%%, "
-                     "deferring to CAT1", cat_ratio * 100)
+                     "categorical-dominant", cat_ratio * 100)
             return {'applies': False}
-        if 0.50 < cat_ratio < 0.70 and n_cont >= 1:
+        if (0.50 < cat_ratio < 0.70 and n_cont >= 1
+                and features.get('_risk_metric_type', 'reid95') in ('l_diversity',)):
             # DYN_CAT: NOISE on continuous + PRAM on categorical + optional LOCSUPR
             dyn_cat_pipeline = ['NOISE', 'PRAM']
             dyn_cat_params = {

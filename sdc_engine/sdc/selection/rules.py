@@ -42,6 +42,8 @@ RULE PRIORITY (evaluated in order, first match wins):
     - SEC1_cont: 5% < reid_95 ≤ 25%, continuous present → NOISE mag=0.05-0.175
 
 3.  Categorical-Aware Rules (CAT1-CAT2) - PRAM for categorical data at moderate risk
+    - GATED: only fires when risk_metric is l_diversity (PRAM invalidates
+      frequency-count metrics like reid_95, k_anonymity, uniqueness)
     - CAT1: ≥70% categorical + ReID95 15-40% + no near-constant QIs → PRAM
     - CAT2: 50-70% categorical + ReID95 15-50% + continuous present → [NOISE, PRAM] pipeline
 
@@ -573,6 +575,15 @@ def categorical_aware_rules(features: Dict) -> Dict:
     would suppress 15-25%.
     """
     if not features.get('has_reid'):
+        return {'applies': False}
+
+    # PRAM invalidates frequency-count-based risk metrics (reid_95, k_anonymity,
+    # uniqueness).  Only allow PRAM selection for attribute-disclosure metrics
+    # (l_diversity) where it genuinely helps.
+    # Reference: sdcMicro docs — "Risk measures based on frequency counts of
+    # keys are no longer valid after perturbative methods."
+    risk_metric = features.get('_risk_metric_type', 'reid95')
+    if risk_metric not in ('l_diversity',):
         return {'applies': False}
 
     reid_95 = features.get('reid_95', 0)
