@@ -35,6 +35,7 @@ You will receive a rules engine recommendation (method, k, rule name, reasoning)
 3. If you DISAGREE: recommend an alternative method with specific reasoning about what the rules engine missed — e.g., it ignored suppression estimates, chose kANON on a small dataset, or picked PRAM for numeric-dominant QIs.
 4. Your "reasoning" field MUST reference the rules engine recommendation explicitly (e.g., "The rules engine selected kANON k=7 via QR3, but estimated suppression at k=7 is 32% — switching to PRAM preserves all records").
 5. If no rules engine recommendation is present, make an independent recommendation.
+6. Context-aware rules (REG1, PUB1, SEC1) fire before data-driven rules when access_tier is PUBLIC or SECURE. This is intentional — stricter tiers demand structural methods earlier regardless of data characteristics. If the rules engine selected PUB1, SEC1, or REG1, do NOT suggest CAT1 or LOW alternatives based on data features alone; the tier constraint is load-bearing. Only override if you have a specific reason (e.g., the recommended k would cause >40% suppression).
 
 You will also recommend preprocessing steps AND a protection method for the dataset described in the user message.
 

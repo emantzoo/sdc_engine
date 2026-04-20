@@ -397,7 +397,7 @@ def _display_result(result, qis, sensitive, orig_data=None, log_entries=None,
     scores_after = reid_after.get("risk_scores", [])
     if scores_before and scores_after:
         fig = risk_histogram(scores_before, scores_after)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="risk_histogram")
 
     # Sample comparison
     if result.protected_data is not None and orig_data is not None:

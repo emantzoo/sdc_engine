@@ -708,10 +708,11 @@ One threshold differs between branches and should be reconciled:
 
 ### Known-Case Regression Tests (`tests/test_rule_selection_known_cases.py`)
 
-24 tests across 8 test classes verifying that each rule fires as designed on synthetic data. Each test constructs a minimal dataset targeting exactly one rule (or a specific guard condition). Covers QR1, QR2, QR4, MED1, RC1, CAT1, DYN_CAT, LOW1-LOW3, SR3, HR6, HR1/HR3, rule priority ordering, and dominance guard.
+42 tests across 12 test classes verifying that each rule fires as designed on synthetic data. Each test constructs a minimal dataset targeting exactly one rule (or a specific guard condition). Covers QR1, QR2, QR4, MED1, RC1 (both injected and organic), CAT1, CAT2 via DYN_CAT_Pipeline, LOW1, LOW2, LOW3, SR3, HR6, HR1/HR3 (injected), PUB1/SEC1/REG1 (context-aware), rule priority ordering, dominance guard, and metric-filter edge cases.
 
 Key findings during builder construction (2026-04-20):
-- **RC rules (RC1-RC4) are dormant** in the normal pipeline. `extract_data_features_with_reid()` always returns `uniqueness_rate=0` and empty `var_priority`, so RC and HR1-HR5 rules never fire through `select_method_suite()`. Tests inject these features manually.
+- **RC rules (RC1-RC4) now fire organically** for small-to-medium datasets. Spec 07 added lazy `var_priority` computation to `build_data_features()` — for datasets up to 10,000 rows with ≤8 QIs, per-QI risk contribution is computed via leave-one-out reid_95 and the resulting `var_priority` populates `features['var_priority']` and `features['risk_concentration']`. For larger datasets, the performance guard skips the computation and RC rules remain dormant — the engine then falls through to QR/LOW rules.
+- **HR1-HR5 remain dormant** — they depend on `uniqueness_rate` which is not populated in the feature pipeline. Tests for HR1-HR5 inject the feature manually via feature-injection (see `TestUniquenessRiskRules` in the known-case suite).
 - **DYN_CAT_Pipeline preempts CAT2.** The pipeline_rules check fires before rule_factories, so `CAT2_Mixed_Categorical_Majority` is unreachable when `DYN_CAT_Pipeline` has the same condition.
 - **QR0 (GENERALIZE_FIRST) is skipped under reid95.** `GENERALIZE_FIRST` is not in `METRIC_ALLOWED_METHODS['reid95']`, so infeasible datasets fall through to HR-series or DEFAULT.
 
@@ -720,3 +721,11 @@ Run: `python -m pytest tests/test_rule_selection_known_cases.py -v` (~1.5s, no R
 ### Empirical Threshold Validation (`tests/empirical/`)
 
 80-run harness testing 4 thresholds across 8 real datasets. See `tests/empirical/reports/SUMMARY.md` for full results and crossover analysis.
+
+**Cross-Metric Validation (`tests/empirical/reports/`):** Two validation runs documented — `reid95/` (80 runs, 3 crossovers documented at rule level) and `k_anonymity_latest/` (80 runs, 15 passing, findings documented in SUMMARY.md). Cross-metric comparison in `COMBINED_SUMMARY.md` addresses whether rule-level thresholds produce different outcomes under different risk metrics.
+
+### Regression Test Additions (Hunts 1–4, 2026-04)
+
+153 additional regression tests covering dtype fuzz (int32/float32/object on each method), degenerate inputs (single-row, single-QI, all-null), and cross-metric matrix (every config/method path tested under reid95/k_anonymity/uniqueness). One latent bug surfaced (NOISE single-row NaN std bypass — fixed). Files: `tests/test_dtype_fuzz.py`, `tests/test_degenerate_inputs.py`, `tests/test_cross_metric.py`.
+
+**Total test count (as of 2026-04-20): 246 tests** across all test files (42 known-case + 28 dtype fuzz + 28 degenerate + 97 cross-metric + 10 harness + 8 parity + 33 other).

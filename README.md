@@ -40,6 +40,8 @@ R package as an optional backend for two methods:
 
 When R is not installed, pure-Python implementations run as fallbacks.
 
+**Verification.** Python and sdcMicro R backends are verified to produce equivalent results within defined tolerance bounds via an automated parity test suite (`tests/parity/`). 8 test cases across LOCSUPR and NOISE on 4 sdcMicro-bundled datasets (testdata, CASCrefmicrodata, free1, francdat) run on every commit when R is available.
+
 ### What's novel in this engine
 
 Beyond wrapping sdcMicro, the following are original contributions:
@@ -228,17 +230,23 @@ Full specification: [Smart Rules Reference](docs/smart_rules_complete.md)
 | [Pipeline Architecture](docs/sdc_pipeline_architecture.md) | System architecture, data flow, component interactions |
 | [Empirical Validation](docs/empirical_validation_checklist.md) | Heuristic thresholds and validation checklist |
 
-## What's New (feat/port-v2-methods)
+## What's New
 
-This branch adds features ported from the `v2-generalized-pipeline` branch:
+### Recent improvements (2026-04)
+
+- **Empirical validation harness** with cross-metric analysis (reid95, k_anonymity) -- 160 runs across 8 datasets
+- **sdcMicro parity test suite** -- 8 tests verifying Python vs R equivalence, all passing
+- **Context-aware routing rules** (PUB1, SEC1, REG1) tied to access tier
+- **Lazy var_priority computation** activates RC rules on small-to-medium datasets without manual backward elimination
+- **246 regression tests** -- known-case suite (42), dtype fuzz (28), degenerate inputs (28), cross-metric matrix (97), parity (8), harness (10), integration (33)
+- **Two latent bugs found by test infrastructure and fixed** -- kANON int32 merge crash on R-loaded data (dtype fuzz), NOISE single-row NaN std bypass (degenerate inputs)
+
+### Ported from v2-generalized-pipeline
 
 - **RANKSWAP** -- rank-based value swapping for numeric data, preserving rank correlations (params: `p`, `R0`, `top_percent`, `bottom_percent`)
 - **RECSWAP** -- record swapping between similar records, preserving marginal distributions (params: `swap_rate`, `match_variables`, `within_strata`, `targeted`)
 - **Pareto frontier** -- `pareto_optimal()` finds non-dominated risk-utility tradeoffs across scenarios
 - **Timestamp truncation** -- grain-aware date generalization with adaptive grain tables (intraday/daily/monthly/yearly)
-- **New selection rules** -- DS6 (correlated continuous), DS7 (mixed low-risk), QR9 (moderate continuous), QR10 (low-risk mixed)
-- **LLM prompt updated** -- AI mode now considers all 6 methods
-- **Fallback orders updated** -- RANKSWAP/RECSWAP integrated into fallback chains
 
 ## Author
 

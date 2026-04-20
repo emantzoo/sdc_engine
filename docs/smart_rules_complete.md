@@ -487,6 +487,8 @@ Gate: `reid_95 > 0.15` (lowered from 0.20 to allow RC4 which fires at 15%). RC1�
 | RC3 | 3+ HIGH QIs (spread high) | kANON | k=7–10, generalisation |
 | RC4 | 1 HIGH + 3+ others (bottleneck) | GENERALIZE bottleneck → kANON k=3 |
 
+**Activation status (as of 2026-04):** RC1-RC4 fire organically on datasets ≤10k rows and ≤8 QIs (performance guard from `config.py:VAR_PRIORITY_COMPUTATION`). HR1-HR5 remain dormant pending `uniqueness_rate` population in the feature pipeline — they are unit-tested via feature injection (see `tests/test_rule_selection_known_cases.py::TestUniquenessRiskRules`).
+
 #### Context-Aware Rules (Access Tier Gated)
 
 These rules fire based on the access tier of the release context, overriding
@@ -879,6 +881,6 @@ The Configure tab supports a Generate Plan → Review → Apply workflow:
 | `sdc/llm_assistant.py` | Cerebras API wrapper (ai_sdc_manly only) |
 | `sdc/llm_classify.py` | LLM column classification (ai_sdc_manly only) |
 | `sdc/llm_method_config.py` | LLM method selection + review mode (ai_sdc_manly only) |
-| `tests/test_rule_selection_known_cases.py` | 39 known-case regression tests for rule selection (incl. PUB1/SEC1/REG1) |
+| `tests/test_rule_selection_known_cases.py` | 42 known-case regression tests for rule selection (incl. PUB1/SEC1/REG1) |
 | `tests/fixtures/rule_test_builders.py` | Deterministic dataset builders for rule testing (22 builders) |
 | `tests/empirical/` | Empirical threshold validation harness (8 datasets, 4 thresholds) |

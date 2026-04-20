@@ -528,7 +528,7 @@ Both Auto-Protect and Smart Combo use the same shared retry engine (`run_rules_e
 
 **Smart Combo** wraps this retry loop in a GENERALIZE tier escalation (light → aggressive), rebuilding data features at each tier so method selection adapts to reduced cardinalities.
 
-**Override rule**: If the rules engine selects a perturbation method (PRAM, NOISE) but a ReID target is set, the system automatically overrides to kANON, because perturbation cannot reduce ReID.
+**Metric-method compatibility filter**: When the risk metric is reid95 and a target is set, perturbative method selections (PRAM, NOISE) are converted to kANON via the retry engine's fallback logic. This is because perturbation reduces uniqueness through value-level changes but does not create equivalence classes, so it cannot meet structural risk targets. Empirical validation under both reid95 and k_anonymity metrics (see `tests/empirical/reports/COMBINED_SUMMARY.md`) confirms this: under k_anonymity, PRAM/NOISE selections never achieve min_k >= target, and the retry engine's natural fallback converges to kANON. The filter is therefore not a special-case override -- it's enforcing a mathematical constraint that would otherwise be discovered one iteration later.
 
 > For the complete retry loop phases, safeguard details, escalation schedules, and fallback order, see [Appendix §4 — Engine Orchestration](#4-engine-orchestration).
 
@@ -1106,6 +1106,8 @@ When `var_priority` or `reid_target` is not provided, GENERALIZE processes all Q
 ### 11.10 Risk-Informed Method Selection
 
 When per-QI risk data (`var_priority`) is available from backward elimination AND ReID95 exceeds 15%, the method selection engine uses **risk concentration rules** (RC1–RC4) before the generic ReID-based rules. These classify how risk is distributed across QIs (dominated, concentrated, spread-high, single bottleneck) and select a targeted method accordingly. When risk concentration rules fire, they include a `preprocessing_hint` identifying the dominant QI, which is logged in the protection engine output.
+
+**Automatic var_priority population (Spec 07, 2026-04):** Prior to this, `var_priority` was populated only via the Configure tab's backward elimination view. It is now computed automatically by the protection engine in `build_data_features()` for datasets up to 10,000 rows with ≤8 QIs. This means RC rules are reachable without a manual backward-elimination step. Performance guard: computation is skipped for larger datasets (configurable via `VAR_PRIORITY_COMPUTATION` in `config.py` -- see `max_n_records`, `max_n_qis`, `timeout_seconds`).
 
 > For the complete risk concentration rule table, conditions, thresholds, and the full rule priority chain, see [Appendix §3 — Method Selection Rules](#3-method-selection-rules).
 

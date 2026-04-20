@@ -234,7 +234,9 @@ def _section_privacy_metrics(result, qis, sensitive) -> str:
 
     # We need the original data — use preprocessed if available, else raw
     import streamlit as st
-    orig = st.session_state.get("preprocessed_data") or st.session_state.get("data_typed")
+    orig = st.session_state.get("preprocessed_data")
+    if orig is None:
+        orig = st.session_state.get("data_typed")
     if orig is None:
         return ""
 
