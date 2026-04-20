@@ -491,7 +491,7 @@ These are the only thresholds grounded in published SDC literature rather than e
 | DP1 | Outliers present + continuous > 0 | NOISE mag=0.20 | High |
 | DP2 | ≥2 skewed columns | PRAM p=0.20 | Medium |
 | DP4 | Integer-coded categoricals | PRAM p=0.20-0.30 | Medium |
-| DATE1 | ≥80% temporal QIs + reid ≤ 40% | PRAM on binned dates | Medium-low — rarely fires |
+| DATE1 | ≥50% temporal QIs + reid ≤ 40% | PRAM on binned dates | Medium-low — rarely fires |
 | LDIV1 | Sensitive diversity ≤ 5 | Advisory: add PRAM on sensitive | Medium |
 | DEFAULT | Catch-all | kANON k=5 / PRAM p=0.20 / NOISE mag=0.15 | High — safe fallbacks |
 

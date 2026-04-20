@@ -1201,7 +1201,7 @@ def l_diversity_rules(features: Dict) -> Dict:
     date_ratio = n_date / n_qis_total if n_qis_total > 0 else 0
     reid_95 = features.get('reid_95', 0)
     date1_would_fire = (n_qis_total >= 2 and n_date >= 2
-                        and date_ratio >= 0.80 and reid_95 <= 0.40)
+                        and date_ratio >= 0.50 and reid_95 <= 0.40)
 
     if date1_would_fire:
         # Merge: PRAM on sensitive cols + PRAM on date QIs
@@ -1269,9 +1269,13 @@ def l_diversity_rules(features: Dict) -> Dict:
 def temporal_dominant_rules(features: Dict) -> Dict:
     """DATE1: Date-dominant QI sets → PRAM on binned dates.
 
-    When ≥80% of QIs are temporal, kANON generalization produces overlapping
+    When ≥50% of QIs are temporal, kANON generalization produces overlapping
     date ranges that are hard to interpret analytically.  PRAM on the already-
     binned date columns preserves temporal distribution shape.
+
+    Threshold widened from 0.80 to 0.50 (Spec 18 Item 3). The 0.80 bar
+    was unreachable on non-time-series data — a dataset needs at least half
+    its QIs to be temporal for PRAM-on-dates to be the preferred approach.
     """
     qi_types = features.get('qi_type_counts', {})
     n_date = qi_types.get('date', 0)
@@ -1282,7 +1286,7 @@ def temporal_dominant_rules(features: Dict) -> Dict:
         return {'applies': False}
 
     date_ratio = n_date / n_qis if n_qis > 0 else 0
-    if date_ratio < 0.80 or reid_95 > 0.40:
+    if date_ratio < 0.50 or reid_95 > 0.40:
         return {'applies': False}
 
     qis = features['quasi_identifiers']

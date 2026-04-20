@@ -2322,8 +2322,8 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 |------|-----------|----------|
 | CAT1 | **l_diversity metric** + ≥70% categorical, ReID95 15–40%, no near-constant QIs | 0.25–0.35 |
 | LDIV1 | Sensitive column n_unique ≤5 + estimated min_l <2 (attribute disclosure risk) | 0.15 |
-| LDIV1+DATE1 | LDIV1 conditions + ≥80% temporal QIs — merged PRAM on sensitive + date cols | 0.20–0.25 |
-| DATE1 | ≥80% of QIs are temporal + ReID95 ≤40% (preserves temporal distributions) | 0.20–0.25 |
+| LDIV1+DATE1 | LDIV1 conditions + ≥50% temporal QIs — merged PRAM on sensitive + date cols | 0.20–0.25 |
+| DATE1 | ≥50% of QIs are temporal + ReID95 ≤40% (preserves temporal distributions) | 0.20–0.25 |
 | DP4 | Integer-coded categorical QIs (≤15 unique ints) + ReID95 ≤30% | 0.20–0.30 |
 | LOW1 | ReID95 ≤10%, categorical-dominant (≥60%), low cardinality | 0.15–0.20 |
 | HR4 | Very small dataset (<100 records), no ReID | 0.30 |
@@ -2349,9 +2349,9 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 
 **RC4 — Single bottleneck QI:** When exactly 1 HIGH-risk QI coexists with 3+ LOW-risk QIs, targeted generalization of only the bottleneck QI followed by light kANON avoids unnecessary modification of the low-risk QIs.
 
-**LDIV1 — L-diversity gap:** When a sensitive column has ≤5 distinct values, most k-anonymous equivalence classes will be homogeneous (l≈1), offering no protection against attribute disclosure. LDIV1 recommends light PRAM on the sensitive column itself (p=0.15). **Co-fire merge:** When DATE1 conditions are also met (≥80% temporal QIs), LDIV1 and DATE1 are merged into a single `LDIV1_DATE1_Merged` rule — PRAM is applied to the union of sensitive columns and date QIs with the higher p_change (0.20–0.25), avoiding the first-match-wins problem where LDIV1 would block DATE1.
+**LDIV1 — L-diversity gap:** When a sensitive column has ≤5 distinct values, most k-anonymous equivalence classes will be homogeneous (l≈1), offering no protection against attribute disclosure. LDIV1 recommends light PRAM on the sensitive column itself (p=0.15). **Co-fire merge:** When DATE1 conditions are also met (≥50% temporal QIs), LDIV1 and DATE1 are merged into a single `LDIV1_DATE1_Merged` rule — PRAM is applied to the union of sensitive columns and date QIs with the higher p_change (0.20–0.25), avoiding the first-match-wins problem where LDIV1 would block DATE1.
 
-**DATE1 — Temporal-dominant QIs:** When ≥80% of QIs are date/temporal, kANON generalization produces overlapping date ranges that are hard to interpret. PRAM on binned date columns preserves the temporal distribution shape. Note: if LDIV1 also applies, the two rules are merged (see LDIV1 above).
+**DATE1 — Temporal-dominant QIs:** When ≥50% of QIs are date/temporal, kANON generalization produces overlapping date ranges that are hard to interpret. PRAM on binned date columns preserves the temporal distribution shape. Note: if LDIV1 also applies, the two rules are merged (see LDIV1 above).
 
 **DP4 — Integer-coded categoricals:** Numeric columns with ≤15 unique integer values (e.g. municipality_code, education_level) are categorical codes. kANON range-binning ("1–5") destroys the coding structure. PRAM preserves it with p_change scaled to the number of categories.
 

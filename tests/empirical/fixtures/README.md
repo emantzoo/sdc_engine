@@ -119,7 +119,7 @@ harness datasets (adult, greek) which run the full pipeline for datasets
 | QR3_Uniform_High | risk_pattern == 'uniform_high', reid_50 > 0.20 | Low |
 | QR4_Widespread | risk_pattern == 'widespread', reid_50 > 0.15 | Low (covered by existing harness) |
 | LOW1_Categorical | reid <= 0.10, cat_ratio >= 0.60, high_card == 0 | Low |
-| DATE1_Temporal_Dominant | 2+ date QIs, date_ratio >= 0.80 | Medium (no temporal fixtures at all) |
+| DATE1_Temporal_Dominant | 2+ date QIs, date_ratio >= 0.50 | Medium (no temporal fixtures at all) |
 | DP4_Integer_Coded_Categorical | integer-coded QIs (e.g., municipality_code: 1-500) | Low |
 | HR6_Very_Small_Dataset | n_records < 200 | Low |
 

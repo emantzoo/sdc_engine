@@ -116,7 +116,7 @@ whether it improves outcomes. Phase 2 would upgrade these to live/niche/redundan
 | CAT1 | **live-unverified** | Gate inside range. Fires on G6 fixture under l_diversity. PRAM for categorical-dominant data at moderate risk | Phase 2. Note: PRAM invalidates frequency-count metrics — gate correctly restricts to l_diversity |
 | CAT2 | **preempted** | Gate reachable (0.50 < cat_ratio < 0.70 under l_diversity) but pipeline rules (DYN_CAT) check the same window first. DYN_CAT's NOISE is blocked for l_diversity → falls through → but DYN_Pipeline may then fire. Narrow surviving window | Investigate whether CAT2 ever wins after both DYN_CAT and DYN_Pipeline fall through. Likely redundant with CAT1 at wider cat_ratio |
 | LDIV1 | **live-unverified** | Gate inside range (fires on G1 fixture with injected min_l). Requires sensitive columns with diversity ≤ 5. No real harness dataset has this organically — only via fixture injection | Phase 2 with sensitive-column datasets |
-| DATE1 | **untriggered** | date_ratio = 0.00 across entire harness. Threshold 0.80 requires ≥80% temporal QIs — no temporal QIs exist in any dataset. Gate is valid for longitudinal data | Add temporal fixture. Consider lowering threshold from 0.80 to 0.50 |
+| DATE1 | **untriggered → widened** | date_ratio = 0.00 across entire harness. Threshold widened from 0.80 to 0.50 (Spec 18 Item 3). Temporal data is a supported use case per product docs. Still untriggered on harness (no temporal fixtures) | Add temporal fixture to exercise the widened gate |
 
 ### ReID risk rules
 
@@ -227,8 +227,9 @@ QIs are date-type.
 
 **Evidence:** Phase 1b metric range scan.
 
-**Follow-up:** Add a temporal fixture if the rule is worth keeping. Consider
-lowering threshold from 0.80 to 0.50. Scoped for Spec 18.
+**Spec 18 outcome:** Threshold widened from 0.80 to 0.50. Temporal data is
+a supported use case (date truncation, date hierarchies, date detection all
+exist in the engine). Still untriggered on harness — no temporal fixtures.
 
 ### Finding 5: DP4 has a narrow untriggered window (untriggered × 1)
 
@@ -277,7 +278,7 @@ Based on this audit, Spec 18 should address:
 | 1 | Delete RC2, RC3, RC4 | 3 rules | preempted-always. No production value |
 | 2 | Fix or delete DYN_CAT_Pipeline | 1 pipeline | unreachable. NOISE/l_diversity contradiction |
 | 3 | Investigate CAT2 preemption | 1 rule | Likely preempted by pipeline rules. Delete if confirmed |
-| 4 | Add temporal fixture for DATE1 | 1 rule | untriggered. Decide keep (lower threshold?) or delete |
+| 4 | ~~Add temporal fixture for DATE1~~ **Done** | 1 rule | Threshold widened 0.80→0.50 (Spec 18 Item 3) |
 | 5 | Decide on DP4 | 1 rule | untriggered, narrow window. Candidate for deletion |
 | 6 | Accept HR1-HR5 as defensive | 5 rules | untriggered but valid. Document as fallback-only |
 | 7 | Add fixture for SR3 | 1 rule | untriggered but valid gate. Low priority |
