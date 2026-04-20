@@ -268,6 +268,20 @@ def build_data_features(
                     min_div = nu
         sensitive_column_diversity = min_div
 
+    # Compute actual l-diversity when QIs and sensitive columns are available
+    min_l = None
+    l_diversity = None
+    if sensitive_columns and quasi_identifiers and sensitive_column_diversity and sensitive_column_diversity <= 10:
+        try:
+            from sdc_engine.sdc.post_protection_diagnostics import check_l_diversity
+            l_result = check_l_diversity(
+                data, quasi_identifiers, sensitive_columns,
+                l_target=2, size_threshold=100)
+            min_l = l_result.get('l_achieved')
+            l_diversity = l_result
+        except Exception:
+            pass
+
     # Risk pattern classification
     reid_50 = reid.get('reid_50', 0)
     reid_95 = reid.get('reid_95', 0)
@@ -342,6 +356,8 @@ def build_data_features(
         'has_sensitive_attributes': False,
         'sensitive_columns': {},
         'sensitive_column_diversity': sensitive_column_diversity,
+        'min_l': min_l,
+        'l_diversity': l_diversity,
         'has_reid': True,
         'reid_50': reid_50,
         'reid_95': reid_95,
