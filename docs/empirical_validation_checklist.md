@@ -577,7 +577,7 @@ These are the only thresholds grounded in published SDC literature rather than e
 
 | Threshold | Value | What it gates | Confidence |
 |---|---|---|---|
-| Mid-pipeline risk multiplier (structural) | 1.10 | Early exit if reid < target × 1.10 | Medium — tighter than documented 1.5 |
+| Mid-pipeline risk multiplier (structural) | 1.10 | Early exit if reid < target × 1.10 | High — fires ~25% of pipeline mid-checks (Spec 15 validated) |
 | Mid-pipeline risk multiplier (other) | 1.20 | Early exit if reid < target × 1.20 | Medium |
 | Escalation time budget | ~30s per phase | Stops escalation if phase exceeds | High — prevents runaway |
 | Max fallbacks | 5 | Cap on fallback attempts | High |
@@ -676,10 +676,10 @@ Of the ~90 thresholds added above, **8 are higher impact than P3**:
 | HR4/HR5 small dataset | <100 / 100-500 rows | Wrong method on tiny data | ✅ HR6 catches <200, HR4 <100 |
 | kANON strategy | 10%/40% violation split | Wrong internal strategy | ✅ Retry escalates through strategies |
 | PRAM dominance | >80% single category | PRAM useless on dominant cats | ✅ Smart config switches to kANON pre-application |
-| Mid-pipeline risk multiplier | 1.10 (code) vs 1.5 (spec) | Premature early exit | 🟡 Partial — code-vs-spec drift, worth fixing |
+| Mid-pipeline risk multiplier | 1.10 | Premature early exit | ✅ Validated — fires 25% of pipeline mid-checks; docs updated to match code |
 | Escalation top-end | k=30 / p=0.50 | Data destruction if reached | ✅ Utility floor gate rejects |
 
-**Conclusion:** The retry engine + fallback chains + k step-down + perturbative challenge together cover all 8. No new mitigation needed. The only actionable item is the mid-pipeline multiplier spec drift (1.10 vs documented 1.5).
+**Conclusion:** The retry engine + fallback chains + k step-down + perturbative challenge together cover all 8. No new mitigation needed. The mid-pipeline multiplier drift (previously flagged as 1.10 vs 1.5) is resolved — Spec 15 investigation confirmed 1.10 fires in ~25% of pipeline mid-checks, placing it in the "defensible" range (5–25%).
 
 The remaining ~82 additions are genuinely P3 (low impact) — either well-established values, user-reviewable classifications, or downstream-compensated parameter choices.
 
