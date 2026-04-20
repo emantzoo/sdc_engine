@@ -170,22 +170,35 @@ nunique=72) already creates high baseline fragmentation, limiting
 PRAM's marginal impact — though this would need testing on
 additional datasets to confirm.
 
-**3a.2 — Proposed mechanism (hypothesis).**
+**3a.2 — Root cause: PRAM and reid_95 are incompatible.**
 
-PRAM perturbs categorical values by probabilistically reassigning
-them to other categories. Because reid_95 measures the size of each
-record's equivalence class (records with identical QI values),
-creating new QI combinations means smaller classes, which means
-higher reid_95. PRAM moves records into combinations that previously
-had zero occurrences, fragmenting the grouping structure.
+Confirmed against sdcMicro documentation. The SDC Practice Guide
+explicitly states: *"Risk measures based on frequency counts of keys
+are no longer valid after applying perturbative methods."*
 
-This failure mode may be specific to the reid_95 metric (which
-penalizes fragmentation directly) or may reflect a broader mismatch
-between PRAM and microdata. PRAM is designed to make individual cell
-values unreliable, which reduces frequency-based disclosure risk.
-But on record-level microdata, the perturbation creates new
-equivalence classes rather than consolidating existing ones. Whether
-this matters depends on how risk is measured.
+reid_95 = 1/eq_class_size is exactly a frequency-count-based risk
+measure. PRAM does not try to reduce record-level uniqueness — it
+makes re-identification *unreliable* by introducing uncertainty about
+whether a matched record is the true record. After PRAM, a record
+may appear unique (reid_95 = 1.0) but an attacker can't trust the
+match because the QI values may have been perturbed.
+
+The engine measures PRAM's output with reid_95 and concludes "PRAM
+failed." But PRAM wasn't trying to reduce reid_95 — it addresses a
+different threat model (re-identification correctness, not
+re-identification possibility).
+
+**This is not a configuration issue.** The engine's PRAM
+implementation uses p_change=0.25-0.35 (sdcMicro default pd=0.80
+corresponds to p_change=0.20), invariant mode with alpha=0.5
+(matches sdcMicro default), and perturbs only categorical QIs.
+The parameters are reasonable. The problem is that the method and
+the metric are fundamentally incompatible.
+
+**Additionally:** sdcMicro strongly recommends using `strata_variables`
+to prevent implausible combinations — the engine's PRAM does not
+support stratification. This is a secondary gap but not the cause
+of the reid increase.
 
 **3a.3 — Engine protection (the self-correcting story).**
 
@@ -206,24 +219,33 @@ choice is a latent issue — it costs one wasted PRAM attempt per run
 on CAT1-eligible datasets — not an active failure that produces bad
 output.
 
-**3a.4 — Scope and limitations.**
+**3a.4 — Scope and fix options.**
 
-N=2 with consistent direction. Both datasets are categorical-heavy
-microdata. The finding may not generalize to: (a) other risk metrics
-like k-anonymity, where PRAM's perturbation may not fragment classes
-in the same way; (b) datasets with different cardinality
-distributions; (c) other PRAM configurations (different p_change,
-different prior matrices). Wider testing on 5+ CAT1-eligible
-datasets would strengthen or scope the finding.
+The root cause (method-metric incompatibility) is confirmed by
+sdcMicro documentation, not just empirical observation. The N=2
+empirical evidence demonstrates the predicted effect. Fix options:
 
-**This observation changes Family 2's scope.** Calibrating the 0.70
-cat_ratio threshold for a rule whose primary method increases reid
-does not produce useful results — lowering the threshold routes more
-datasets to the problem, raising it reduces exposure but doesn't fix
-the method choice. The productive next step is investigating whether
-CAT1 should route to PRAM at all on microdata under reid_95, which
-is a method-selection question rather than a threshold-calibration
-question.
+**(a) Don't route to PRAM when metric is reid_95.** If the engine
+measures success via reid_95, only structural methods (kANON,
+LOCSUPR, GENERALIZE) that reduce uniqueness should be primary.
+PRAM should only be offered when the risk metric addresses what
+PRAM actually reduces (attribute disclosure, frequency-table risk).
+This is the narrowest fix — one condition in CAT1's rule.
+
+**(b) Use PRAM as complement, not primary.** Apply kANON/LOCSUPR
+first to reduce uniqueness, then apply PRAM on top to add
+uncertainty. This follows common SDC literature practice.
+
+**(c) Measure PRAM's effectiveness differently.** After PRAM, use
+a perturbation-aware risk metric instead of reid_95. This is a
+larger architectural change.
+
+**This changes Family 2's scope.** Calibrating the 0.70 cat_ratio
+threshold for a rule whose primary method is incompatible with the
+risk metric does not produce useful results. The productive next
+step is implementing fix (a) — gate PRAM out of CAT1 when
+`risk_metric == 'reid95'` — and then calibrate the threshold of a
+working rule.
 
 ### Finding 4: Mathematical floor on reid reduction
 
@@ -288,15 +310,16 @@ warranted** because:
 - **On testdata (4580 rows), RC1 fires organically and works as
   designed** — selects LOCSUPR, escalates to k=20, meets target with
   reid=0.044 and util=1.000.
-- **PRAM increases reid on both CAT1-eligible real datasets tested**
-  (Finding 3a). On greek_mid: reid 0.33 → 1.0, eq classes 2.6x more
-  fragmented. On adult_mid: reid 0.25 → 0.33, eq classes 1.4x.
-  Consistent direction, N=2. The engine's priority ordering (MED1
-  fires before CAT1 on adult_mid) and retry engine (kANON fallback
-  on greek_mid) mask the user-visible damage. CAT1's method choice
-  is a latent issue, not an active failure. Wider testing needed
-  before concluding systematic. This changes Family 2's scope from
-  threshold calibration to method-selection investigation.
+- **PRAM and reid_95 are fundamentally incompatible as a method-metric
+  pair** (Finding 3a). Confirmed against sdcMicro documentation: "Risk
+  measures based on frequency counts of keys are no longer valid after
+  applying perturbative methods." PRAM reduces re-identification
+  *correctness*; reid_95 measures re-identification *possibility*. On
+  both CAT1-eligible real datasets, PRAM increased reid (greek_mid:
+  0.33 → 1.0; adult_mid: 0.25 → 0.33). The engine's priority ordering
+  and retry engine mask the user-visible damage. Not a configuration
+  issue — the parameters are reasonable; the method and metric address
+  different threat models.
 - **On synthetic data where we force-inject var_priority, RC rules and
   QR fallthrough produce Pareto-incomparable tradeoffs** (reid vs utility),
   not Pareto-superior ones. But this synthetic finding doesn't generalize
@@ -315,17 +338,15 @@ warranted** because:
    engine outcomes on large real datasets are already excellent
    (adult_mid: reid=0.039, util=0.993), so the case for raising the
    threshold is not obvious.
-3. **CAT1's method selection warrants investigation before Family 2
-   threshold calibration proceeds.** PRAM increased reid on both
-   CAT1-eligible real datasets tested (Finding 3a). Calibrating the
-   0.70 cat_ratio threshold while CAT1's primary method increases
-   reid does not produce useful results — lowering the threshold
-   routes more datasets to the problem, raising it reduces exposure
-   without fixing the method choice. The productive next step is
-   establishing whether CAT1 should route to PRAM at all on microdata
-   under reid_95. This is a method-selection question, separate from
-   threshold calibration, and should be scoped as its own
-   investigation before Family 2 proceeds.
+3. **Gate PRAM out of CAT1 when `risk_metric == 'reid95'`.**
+   PRAM and reid_95 are incompatible (Finding 3a, confirmed against
+   sdcMicro documentation). When the engine measures success via
+   reid_95, CAT1 should route to a structural method (kANON or
+   LOCSUPR) instead of PRAM. This is a one-condition fix in CAT1's
+   rule. PRAM remains appropriate when the risk metric addresses
+   what PRAM actually reduces (attribute disclosure, frequency-table
+   risk). Family 2 threshold calibration should proceed after this
+   fix, not before.
 4. **Future calibration studies** should jointly test all four
    concentration patterns and use real datasets with organic correlation
    structure. Given Findings 2 and 3, it is unclear whether the 40%/60%
