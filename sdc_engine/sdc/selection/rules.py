@@ -101,7 +101,8 @@ import logging
 import pandas as pd
 from typing import Dict, List, Optional
 
-from .features import extract_data_features_with_reid, classify_risk_concentration, top_categorical_qis
+from .features import classify_risk_concentration, top_categorical_qis
+from sdc_engine.sdc.protection_engine import build_data_features
 
 log = logging.getLogger(__name__)
 
@@ -1184,7 +1185,7 @@ def l_diversity_rules(features: Dict) -> Dict:
         return {'applies': False}
 
     # Use pre-computed l-diversity from features if available (computed
-    # by extract_data_features_with_reid), otherwise heuristic estimate
+    # by build_data_features), otherwise heuristic estimate
     estimated_min_l = features.get('min_l')
     if estimated_min_l is None:
         # Fallback heuristic: with only `sens_div` distinct sensitive values,
@@ -1618,7 +1619,13 @@ def select_method_by_features(
     --------
     dict : {method, parameters, rule, confidence, reason, features}
     """
-    features = extract_data_features_with_reid(data, analysis, quasi_identifiers)
+    # Extract sensitive_columns from analysis dict (if present) for build_data_features
+    _sens = analysis.get('sensitive_columns', {})
+    _sens_list = list(_sens.keys()) if isinstance(_sens, dict) else list(_sens) if _sens else None
+    features = build_data_features(
+        data, quasi_identifiers,
+        sensitive_columns=_sens_list or None,
+    )
 
     if verbose and features.get('has_reid'):
         print(f"\n[ReID Metrics]")
