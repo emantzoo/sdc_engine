@@ -122,8 +122,8 @@ def _measure_risk(
     try:
         assessment = compute_risk(data, quasi_identifiers, mt, risk_target_raw)
         return assessment.normalized_score
-    except Exception:
-        # Fallback to direct REID95
+    except (ValueError, TypeError, KeyError) as exc:
+        log.warning("[SmartDefaults] Risk computation failed, falling back to REID95: %s", exc)
         return calculate_reid(data, quasi_identifiers).get('reid_95', 1.0)
 
 
@@ -874,7 +874,8 @@ def _is_human_age(series: pd.Series) -> bool:
         if vals.empty:
             return False
         return vals.median() < 100 and vals.min() >= 0 and vals.max() <= 135
-    except Exception:
+    except (ValueError, TypeError) as exc:
+        log.warning("[SmartDefaults] Age-like detection failed: %s", exc)
         return False
 
 
@@ -1026,8 +1027,8 @@ def build_type_aware_preprocessing(
                                   f'truncation would destroy information',
                     }
                     continue
-            except Exception:
-                pass
+            except (ValueError, TypeError, OverflowError) as exc:
+                log.warning("[SmartDefaults] Date period check failed for '%s': %s", col, exc)
             plan[col] = {
                 'action': 'date_truncation',
                 'function': 'apply_date_truncation',
@@ -1601,7 +1602,8 @@ def estimate_cardinality(
                 est = nunique  # cardinality rarely changes much
             else:
                 est = nunique
-        except Exception:
+        except (ValueError, TypeError, KeyError) as exc:
+            log.warning("[SmartDefaults] Cardinality estimation failed for '%s': %s", col, exc)
             est = nunique
 
         estimates.append(est)
@@ -1654,8 +1656,8 @@ def _detect_data_characteristics(
                 'columns': list(direct_ids.keys()),
                 'details': direct_ids
             })
-    except Exception:
-        pass
+    except (ValueError, TypeError, KeyError) as exc:
+        log.warning("[SmartDefaults] Direct identifier check failed: %s", exc)
 
     # Rule 2: Per-QI warnings — use semantic type label when available
     warned_cols = set()
@@ -1724,7 +1726,8 @@ def _detect_data_characteristics(
             elif (is_numeric or is_coded) and nunique > 50:
                 try:
                     skewness = data[col].skew() if is_numeric else 0
-                except Exception:
+                except (ValueError, TypeError) as exc:
+                    log.warning("[SmartDefaults] Skewness failed for '%s': %s", col, exc)
                     skewness = 0
                 if abs(skewness) > 2:
                     warnings.append({
@@ -1775,8 +1778,8 @@ def _detect_data_characteristics(
                         'columns': [col]
                     })
                     warned_cols.add(col)
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as exc:
+            log.warning("[SmartDefaults] QI warning generation failed for '%s': %s", col, exc)
 
     # Rule 3: Small dataset (MEDIUM)
     if len(data) < 1000:

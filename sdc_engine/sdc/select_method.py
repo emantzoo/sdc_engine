@@ -16,11 +16,14 @@ Author: SDC Methods Implementation
 Date: December 2025
 """
 
+import logging
 import pandas as pd
 import numpy as np
 import sys
 import os
 from typing import Dict, List, Optional, Tuple, Union
+
+_log = logging.getLogger(__name__)
 
 from sdc_engine.sdc.sdc_utils import (
     analyze_data,
@@ -118,8 +121,8 @@ def extract_data_features_with_reid(
             if numeric_data.size > 0:
                 small_cells = (numeric_data < 3).sum().sum()
                 features['small_cells_rate'] = small_cells / numeric_data.size
-        except Exception:
-            pass
+        except (ValueError, TypeError) as exc:
+            _log.warning("[select_method] Small cells rate failed: %s", exc)
 
     # Detect outliers
     for col in features['continuous_vars']:
@@ -130,8 +133,8 @@ def extract_data_features_with_reid(
                 if ((data[col] < Q1 - 3 * IQR) | (data[col] > Q3 + 3 * IQR)).any():
                     features['has_outliers'] = True
                     break
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                _log.warning("[select_method] Outlier detection failed for '%s': %s", col, exc)
 
     # Detect skewed categorical distributions
     for col in features['categorical_vars']:
@@ -140,8 +143,8 @@ def extract_data_features_with_reid(
                 value_counts = data[col].value_counts()
                 if len(value_counts) > 0 and value_counts.iloc[0] / len(data) > 0.7:
                     features['skewed_columns'].append(col)
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                _log.warning("[select_method] Skew detection failed for '%s': %s", col, exc)
 
     # Calculate risk metric if microdata with QIs
     if quasi_identifiers and features['data_type'] == 'microdata':
@@ -1051,8 +1054,8 @@ def apply_and_validate(
                     reid_after = calculate_reid(protected, protected_qis)
                     results['reid_before'] = reid_before
                     results['reid_after'] = reid_after
-                except Exception:
-                    pass  # ReID is optional
+                except (ValueError, KeyError, TypeError) as exc:
+                    _log.warning("[select_method] ReID calculation failed: %s", exc)
 
                 if verbose:
                     print(f"\n--- Risk Comparison ---")
@@ -1774,10 +1777,10 @@ def apply_pipeline(
                     reid_after = calculate_reid(current_data, final_qis)
                     results['reid_before'] = reid_before
                     results['reid_after'] = reid_after
-                except Exception:
-                    pass  # ReID is optional
-        except Exception:
-            pass
+                except (ValueError, KeyError, TypeError) as exc:
+                    _log.warning("[select_method] Pipeline ReID calculation failed: %s", exc)
+        except (ValueError, KeyError, TypeError) as exc:
+            _log.warning("[select_method] Pipeline post-processing failed: %s", exc)
 
     if verbose:
         print("\n" + "=" * 60)
@@ -1932,7 +1935,8 @@ def _try_method_with_tuning(
                             utility = calculate_utility_metrics(data, protected, columns=quasi_identifiers)
                             iter_result['utility_metrics'] = utility
                             utility_score = utility.get('utility_score', 0)
-                        except Exception:
+                        except (ValueError, TypeError, KeyError) as exc:
+                            _log.warning("[select_method] Utility calculation failed: %s", exc)
                             utility_score = 0
 
                         targets_met, target_results = _check_reid_targets(reid_after, reid_target)
@@ -2190,7 +2194,8 @@ def _calculate_tabular_utility_metrics(
             row_prop_preserved = 1 - np.abs(orig_row_props - prot_row_props).mean()
         else:
             row_prop_preserved = 0
-    except Exception:
+    except (ValueError, TypeError, KeyError) as exc:
+        _log.warning("[select_method] Row proportion preservation failed: %s", exc)
         row_prop_preserved = 0.5
 
     metrics['correlation_preserved'] = max(0, row_prop_preserved)
@@ -2305,8 +2310,8 @@ def compare_methods(
     if data_type == 'microdata' and qis:
         try:
             reid_before = calculate_reid(data, qis)
-        except Exception:
-            pass
+        except (ValueError, KeyError, TypeError) as exc:
+            _log.warning("[select_method] Initial ReID calculation failed: %s", exc)
 
     # Direct method function mapping (faster than apply_and_validate)
     from sdc_engine.sdc import (
@@ -2406,8 +2411,8 @@ def compare_methods(
                         reid_95_after = reid_after.get('reid_95', 0)
                         if reid_95_before > 0:
                             risk_reduction = (reid_95_before - reid_95_after) / reid_95_before
-                    except Exception:
-                        pass
+                    except (ValueError, KeyError, TypeError) as exc:
+                        _log.warning("[select_method] ReID after protection failed: %s", exc)
 
                 # Get tabular-specific metrics from metadata
                 stats = metadata.get('statistics', {}) if isinstance(metadata, dict) else {}
@@ -2812,8 +2817,8 @@ def smart_protect(
                     print(f"    Suggested max_categories for GENERALIZE: {suggested_max_cats}")
                     print(f"    RECOMMENDATION: Use Preprocess tab to apply GENERALIZE before protection")
 
-        except Exception:
-            pass  # Continue with normal flow if ReID calculation fails
+        except (ValueError, KeyError, TypeError) as exc:
+            _log.warning("[select_method] Pre-recommendation ReID failed: %s", exc)
 
     # Get ReID-based recommendation (includes pipeline_hint for escalation)
     recommendation = recommend_method(data, goal=goal, quasi_identifiers=quasi_identifiers, verbose=False)
@@ -3172,8 +3177,8 @@ def smart_protect(
                                                 print(f"      Target met! Stopping pipeline early.")
                                             pipeline_target_met = True
                                             break
-                                except Exception:
-                                    pass
+                                except (ValueError, KeyError, TypeError) as exc:
+                                    _log.warning("[select_method] Pipeline step ReID check failed: %s", exc)
                         except Exception as e:
                             if verbose:
                                 print(f"      {method} failed: {e}")
@@ -3313,7 +3318,8 @@ def smart_protect(
                     from sdc_engine.sdc.sdc_utils import calculate_reid
                     reid_calc = calculate_reid(result['protected_data'], quasi_identifiers)
                     final_reid_95 = reid_calc.get('reid_95')
-                except Exception:
+                except (ValueError, KeyError, TypeError) as exc:
+                    _log.warning("[select_method] Final ReID calculation failed: %s", exc)
                     final_reid_95 = None
 
         result['final_reid_95'] = final_reid_95

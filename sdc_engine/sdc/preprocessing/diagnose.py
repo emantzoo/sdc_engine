@@ -821,8 +821,8 @@ def recommend_preprocessing(
                         ).notna().sum()
                         if date_ct / len(sample) > 0.8:
                             return 'date'
-                    except Exception:
-                        pass
+                    except (ValueError, TypeError, OverflowError):
+                        pass  # Not a date column
         return 'categorical'
 
     # First pass: analyze all QIs

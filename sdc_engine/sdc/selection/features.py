@@ -5,9 +5,12 @@ Feature Extraction for Method Selection
 Extracts data characteristics including ReID metrics for rule-based selection.
 """
 
+import logging
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 # Import ReID calculation and pattern classification from metrics
 import sys
@@ -204,8 +207,8 @@ def extract_data_features_with_reid(
                 for k_val in (3, 5, 7):
                     records_below = int(eq_sizes[eq_sizes < k_val].sum())
                     estimated_suppression[k_val] = records_below / n
-            except Exception:
-                pass
+            except (ValueError, TypeError, KeyError) as exc:
+                _log.warning("[features] Equivalence class estimation failed: %s", exc)
         features['estimated_suppression'] = estimated_suppression
         features['estimated_suppression_k5'] = estimated_suppression[5]  # backward compat
 
@@ -301,8 +304,8 @@ def extract_data_features_with_reid(
                     features['high_risk_count'] = 0
                     features['high_risk_rate'] = 0
                 features['_risk_metric_type'] = 'reid95'
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as exc:
+            _log.warning("[features] Risk metrics calculation failed: %s", exc)
 
     # Sensitive column diversity (for LDIV1: l-diversity gap detection)
     sens_cols = analysis.get('sensitive_columns', {})
@@ -325,8 +328,8 @@ def extract_data_features_with_reid(
                     l_target=2, size_threshold=100)
                 features['min_l'] = l_result.get('l_achieved')
                 features['l_diversity'] = l_result
-            except Exception:
-                pass
+            except (ImportError, ValueError, TypeError, KeyError) as exc:
+                _log.warning("[features] l-diversity check failed: %s", exc)
 
 
     return features

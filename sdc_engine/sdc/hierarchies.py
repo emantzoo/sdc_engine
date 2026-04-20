@@ -223,13 +223,15 @@ class IntervalHierarchyBuilder:
             try:
                 skew = float(valid.skew())
                 use_quantile = abs(skew) > 3.0
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                log.warning("[Hierarchy] Skewness calculation failed for '%s': %s", column_name, exc)
                 use_quantile = False
 
         # Collect all unique original values (as strings for mapping keys)
         try:
             numeric_vals = pd.to_numeric(valid, errors='coerce').dropna()
-        except Exception:
+        except (ValueError, TypeError) as exc:
+            log.warning("[Hierarchy] Numeric coercion failed for '%s': %s", column_name, exc)
             numeric_vals = valid
 
         if len(numeric_vals) == 0:
@@ -273,7 +275,8 @@ class IntervalHierarchyBuilder:
                 n_bins = min(n_bins, 50)
                 try:
                     _, bin_edges = pd.qcut(vals_arr, q=n_bins, retbins=True, duplicates='drop')
-                except Exception:
+                except (ValueError, IndexError) as exc:
+                    log.warning("[Hierarchy] Quantile binning failed for '%s': %s — falling back to linspace", column_name, exc)
                     bin_edges = np.linspace(vmin, vmax, n_bins + 1)
                 for v_str in all_original_strs:
                     v = float(v_str) if v_str.replace('.', '', 1).replace('-', '', 1).isdigit() else 0
@@ -344,10 +347,12 @@ class DateHierarchyBuilder:
         if not pd.api.types.is_datetime64_any_dtype(valid):
             try:
                 valid = pd.to_datetime(valid, errors='coerce', dayfirst=True).dropna()
-            except Exception:
+            except (ValueError, TypeError, OverflowError) as exc:
+                log.warning("[Hierarchy] Date parsing (dayfirst) failed for '%s': %s", column_name, exc)
                 try:
                     valid = pd.to_datetime(valid, errors='coerce').dropna()
-                except Exception:
+                except (ValueError, TypeError, OverflowError) as exc2:
+                    log.warning("[Hierarchy] Date parsing fallback failed for '%s': %s", column_name, exc2)
                     return Hierarchy(column_name, [{}], builder_type='date')
 
         if len(valid) == 0:
@@ -364,10 +369,10 @@ class DateHierarchyBuilder:
         for s in orig_strs:
             try:
                 dt_lookup[s] = pd.Timestamp(s)
-            except Exception:
+            except (ValueError, TypeError, OverflowError):
                 try:
                     dt_lookup[s] = pd.to_datetime(s, dayfirst=True)
-                except Exception:
+                except (ValueError, TypeError, OverflowError):
                     dt_lookup[s] = None
 
         # Level 0: identity

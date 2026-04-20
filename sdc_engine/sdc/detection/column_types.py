@@ -5,10 +5,13 @@ Column Type Detection
 Identify and classify column types for SDC method selection.
 """
 
+import logging
 import pandas as pd
 import numpy as np
 import re
 from typing import Dict, List, Any, Optional
+
+_log = logging.getLogger(__name__)
 
 from ..config import COLUMN_TYPE_KEYWORDS, DIRECT_IDENTIFIER_KEYWORDS, DIRECT_IDENTIFIER_PATTERNS
 
@@ -261,8 +264,8 @@ def auto_detect_direct_identifiers(
                             if matches / len(sample) > 0.5:
                                 detected_identifiers[col] = pattern_name
                                 break
-                        except Exception:
-                            pass
+                        except (ValueError, TypeError):
+                            pass  # Pattern matching failure
 
     return detected_identifiers
 
@@ -352,5 +355,6 @@ def _is_sequential_id(series: pd.Series) -> bool:
         median_diff = np.median(diffs)
 
         return median_diff <= 1.5 and min_val >= 0
-    except Exception:
+    except (ValueError, TypeError) as exc:
+        _log.warning("[column_types] Sequential ID detection failed: %s", exc)
         return False

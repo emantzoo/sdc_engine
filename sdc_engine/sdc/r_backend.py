@@ -51,7 +51,8 @@ def _check_r_available(force: bool = False) -> bool:
         try:
             ro.r('library(sdcMicro)')
             result = True
-        except Exception:
+        except (RuntimeError, ValueError) as exc:
+            log.warning("[r_backend] sdcMicro library not available: %s", exc)
             result = False
     except ImportError:
         result = False

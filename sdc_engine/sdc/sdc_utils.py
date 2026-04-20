@@ -13,10 +13,13 @@ Author: SDC Methods Implementation
 Date: December 2025
 """
 
+import logging
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Tuple, Union, Optional, Any
 import warnings
+
+_log = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -597,7 +600,8 @@ def _score_uniqueness_contribution(
         qis_with = potential_qis[:4] + [column]
         groups_with = full_data.groupby(qis_with, observed=True).size()
         uniqueness_with = (groups_with == 1).sum() / len(full_data)
-    except Exception:
+    except (ValueError, TypeError, KeyError) as exc:
+        _log.warning("[sdc_utils] Uniqueness-with calculation failed: %s", exc)
         result['score'] = 0.4
         result['reasons'].append("Cannot calculate uniqueness with column")
         return result
@@ -607,7 +611,8 @@ def _score_uniqueness_contribution(
         qis_without = potential_qis[:4]
         groups_without = full_data.groupby(qis_without, observed=True).size()
         uniqueness_without = (groups_without == 1).sum() / len(full_data)
-    except Exception:
+    except (ValueError, TypeError, KeyError) as exc:
+        _log.warning("[sdc_utils] Uniqueness-without calculation failed: %s", exc)
         uniqueness_without = 0.0
 
     # Calculate contribution
@@ -773,8 +778,8 @@ def auto_detect_sensitive_columns(
                             if matches / len(sample) > 0.5:
                                 detected_identifiers[col] = pattern_name
                                 break
-                        except Exception:
-                            pass
+                        except (ValueError, TypeError):
+                            pass  # Pattern matching failure for this column
 
     return detected_identifiers
 
@@ -1831,8 +1836,8 @@ def coerce_columns_by_types(
                             _log.info(
                                 "[coerce] '%s' converted via EU number format "
                                 "(dot=thousands, comma=decimal)", col)
-                except Exception:
-                    pass
+                except (ValueError, TypeError) as exc:
+                    _log.warning("[coerce] EU number format conversion failed for '%s': %s", col, exc)
 
             if pct > 50:
                 data[col] = coerced

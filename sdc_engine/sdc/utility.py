@@ -136,8 +136,8 @@ def compute_utility(
                 corr = orig.corr(proc)
                 if pd.notna(corr):
                     col_scores[col] = abs(corr)
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("[utility] Correlation failed for '%s': %s", col, exc)
         else:
             try:
                 n = min(len(orig), len(proc))
@@ -145,8 +145,8 @@ def compute_utility(
                     same = (orig.iloc[:n].astype(str)
                             == proc.iloc[:n].astype(str)).sum()
                     col_scores[col] = float(same) / n
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("[utility] String comparison failed for '%s': %s", col, exc)
 
     if not col_scores:
         return 1.0
@@ -210,8 +210,8 @@ def compute_per_variable_utility(
                         _proc_numeric = True
                         _range_binned = True
                         proc = proc_mid
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("[utility] Range midpoint extraction failed for '%s': %s", col, exc)
 
         if _orig_numeric and _proc_numeric:
             # Numeric (or numeric→range with midpoint recovery)
@@ -219,21 +219,24 @@ def compute_per_variable_utility(
                 corr = orig.corr(proc)
                 m['correlation'] = (round(float(corr), 4)
                                     if pd.notna(corr) else None)
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                logger.warning("[utility] Correlation failed for '%s': %s", col, exc)
                 m['correlation'] = None
             try:
                 orig_range = float(orig.max() - orig.min())
                 proc_range = float(proc.max() - proc.min())
                 m['range_ratio'] = (round(proc_range / orig_range, 4)
                                     if orig_range > 0 else 1.0)
-            except Exception:
+            except (ValueError, TypeError, ZeroDivisionError) as exc:
+                logger.warning("[utility] Range ratio failed for '%s': %s", col, exc)
                 m['range_ratio'] = None
             try:
                 orig_mean = float(orig.mean())
                 proc_mean = float(proc.mean())
                 m['mean_shift'] = round(
                     abs(proc_mean - orig_mean) / (abs(orig_mean) or 1), 4)
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                logger.warning("[utility] Mean shift failed for '%s': %s", col, exc)
                 m['mean_shift'] = None
             m['dtype'] = 'numeric'
             if _range_binned:
@@ -255,7 +258,8 @@ def compute_per_variable_utility(
                     m['row_preservation'] = round(float(same) / n, 4)
                 else:
                     m['row_preservation'] = 1.0
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                logger.warning("[utility] Row preservation failed for '%s': %s", col, exc)
                 m['row_preservation'] = None
             m['dtype'] = 'categorical'
 
@@ -324,7 +328,8 @@ def compute_il1s(
                         6)
                 else:
                     per_var[col] = 0.0
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                logger.warning("[utility] IL per-variable numeric failed for '%s': %s", col, exc)
                 per_var[col] = 1.0
         else:
             # Categorical: proportion changed
@@ -332,7 +337,8 @@ def compute_il1s(
                 same = (orig.iloc[:n].astype(str)
                         == proc.iloc[:n].astype(str)).sum()
                 per_var[col] = round(1.0 - float(same) / n, 6)
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                logger.warning("[utility] IL per-variable categorical failed for '%s': %s", col, exc)
                 per_var[col] = 1.0
 
     if not per_var:
@@ -427,7 +433,8 @@ def compute_benchmark_analysis(
             corr_info['mean_diff'] = round(float(
                 diff.values[np.triu_indices(len(numeric_cols), k=1)].mean()
             ), 4)
-        except Exception:
+        except (ValueError, TypeError) as exc:
+            logger.warning("[utility] Correlation structure diff failed: %s", exc)
             corr_info['max_diff'] = None
             corr_info['mean_diff'] = None
     result['correlations'] = corr_info
@@ -455,8 +462,8 @@ def compute_benchmark_analysis(
                 'n_categories_orig': len(o_freq),
                 'n_categories_prot': len(p_freq),
             }
-        except Exception:
-            pass
+        except (ValueError, TypeError) as exc:
+            logger.warning("[utility] Frequency table TVD failed for '%s': %s", col, exc)
 
     result['frequency_tables'] = freq_tables
 
@@ -490,8 +497,8 @@ def compute_benchmark_analysis(
                     if _proc_na > _orig_na:
                         cell_suppressed = True
                         break
-                except Exception:
-                    pass
+                except (KeyError, TypeError) as exc:
+                    logger.warning("[utility] Cell suppression check failed for '%s': %s", qc, exc)
         sensitive_changed = False
         for sc in sens_in_data:
             try:
@@ -500,8 +507,8 @@ def compute_benchmark_analysis(
                         processed[sc].iloc[:n_check]):
                     sensitive_changed = True
                     break
-            except Exception:
-                pass
+            except (KeyError, TypeError) as exc:
+                logger.warning("[utility] Sensitive change check failed for '%s': %s", sc, exc)
 
         # Also meaningful when QIs are generalised (cardinality reduction
         # changes group composition even if sensitive is untouched).
@@ -512,8 +519,8 @@ def compute_benchmark_analysis(
                     if processed[qc].nunique() < original[qc].nunique():
                         qi_generalised = True
                         break
-                except Exception:
-                    pass
+                except (KeyError, TypeError) as exc:
+                    logger.warning("[utility] QI generalisation check failed for '%s': %s", qc, exc)
 
         cross_tab_meaningful = (records_suppressed or cell_suppressed
                                 or sensitive_changed or qi_generalised)
@@ -689,8 +696,8 @@ def compute_benchmark_analysis(
                                     float(cv_prot), 4)
                                     if cv_prot is not None else 0.0,
                             })
-                    except Exception:
-                        pass
+                    except (ValueError, TypeError, KeyError) as exc:
+                        logger.warning("[utility] Cross-tab stat failed for (%s, %s): %s", sc, qc, exc)
 
             cross_tab['subgroup_means'] = subgroup_stats
             cross_tab['skipped_pairs'] = skipped_pairs
@@ -778,8 +785,8 @@ def compute_fast_qi_utility(
                             min(1.0, cv_prot / cv_orig))
                     else:
                         preservations.append(1.0)
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as exc:
+            logger.warning("[utility] Cross-tab preservation failed for (%s, %s): %s", sc, qi_name, exc)
 
     if not preservations:
         return 1.0
@@ -840,7 +847,8 @@ def _cramers_v(
         if denom <= 0:
             return None
         return float(min(1.0, (phi2_corr / denom) ** 0.5))
-    except Exception:
+    except (ValueError, TypeError, ZeroDivisionError) as exc:
+        logger.warning("[utility] Cramer's V calculation failed: %s", exc)
         return None
 
 
@@ -890,7 +898,8 @@ def _categorical_preservation(
 
         mean_tvd = sum(tvds) / len(tvds)
         return round(max(0.0, 1.0 - mean_tvd), 4)
-    except Exception:
+    except (ValueError, TypeError, KeyError) as exc:
+        logger.warning("[utility] Categorical preservation failed: %s", exc)
         return None
 
 
@@ -952,13 +961,14 @@ def _eta_squared(
                 try:
                     g = pd.to_datetime(g, errors='coerce')
                     _is_datetime = True
-                except Exception:
-                    pass
+                except (ValueError, TypeError, OverflowError) as exc:
+                    logger.warning("[utility] Date parsing failed for column: %s", exc)
             if _is_datetime:
                 try:
                     _epoch = pd.Timestamp('1970-01-01')
                     g_float = (g - _epoch).dt.total_seconds().astype(float)
-                except Exception:
+                except (ValueError, TypeError, OverflowError) as exc:
+                    logger.warning("[utility] Epoch conversion failed: %s", exc)
                     g_float = g.astype(np.int64).astype(float)
             else:
                 try:
@@ -994,7 +1004,8 @@ def _eta_squared(
         group_means = v.groupby(g).transform('mean')
         ss_between = ((group_means - grand_mean) ** 2).sum()
         return float(ss_between / ss_total)
-    except Exception:
+    except (ValueError, TypeError, ZeroDivisionError) as exc:
+        logger.warning("[utility] Eta-squared calculation failed: %s", exc)
         return None
 
 
@@ -1056,7 +1067,8 @@ def compute_distributional_metrics(
                 m['hellinger_distance'] = round(
                     float(np.sqrt(0.5 * np.sum(
                         (np.sqrt(o_p) - np.sqrt(p_p)) ** 2))), 6)
-            except Exception:
+            except (ValueError, TypeError, ZeroDivisionError) as exc:
+                logger.warning("[utility] KL/Hellinger (numeric) failed for '%s': %s", col, exc)
                 m['kl_divergence'] = None
                 m['hellinger_distance'] = None
         else:
@@ -1076,7 +1088,8 @@ def compute_distributional_metrics(
                 m['hellinger_distance'] = round(
                     float(np.sqrt(0.5 * np.sum(
                         (np.sqrt(o_p) - np.sqrt(p_p)) ** 2))), 6)
-            except Exception:
+            except (ValueError, TypeError, ZeroDivisionError) as exc:
+                logger.warning("[utility] KL/Hellinger (categorical) failed for '%s': %s", col, exc)
                 m['kl_divergence'] = None
                 m['hellinger_distance'] = None
 

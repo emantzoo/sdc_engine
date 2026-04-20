@@ -281,7 +281,7 @@ class CerebrasAssistant:
             body_text = ""
             try:
                 body_text = e.read().decode("utf-8", errors="replace")[:500]
-            except Exception:
+            except (OSError, AttributeError):
                 pass
             logger.warning("Gemini API HTTP error %d: %s — %s", e.code, e.reason, body_text)
             return None

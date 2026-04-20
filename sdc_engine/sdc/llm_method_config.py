@@ -347,8 +347,8 @@ def _build_dataset_profile(
                 if parsed.notna().mean() > 0.8:
                     n_date_qi += 1
                     continue
-            except Exception:
-                pass
+            except (ValueError, TypeError, OverflowError):
+                pass  # Not a date column
             n_cat_qi += 1
 
     n_total_qi = max(1, len(quasi_identifiers))
@@ -377,8 +377,8 @@ def _build_dataset_profile(
                 if parsed.notna().mean() > 0.8:
                     is_date = True
                     is_categorical = False
-            except Exception:
-                pass
+            except (ValueError, TypeError, OverflowError):
+                pass  # Not a date column
 
         dtype_str = "Date/Time" if is_date else "Numeric" if is_numeric else "Categorical"
 
@@ -399,8 +399,8 @@ def _build_dataset_profile(
                 else:
                     shape = "moderate-skew"
                 parts.append(shape)
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("[llm_method_config] Numeric stats failed for '%s': %s", qi, exc)
         elif is_categorical and len(non_null) > 0:
             # Max category frequency + rare categories
             try:
@@ -411,8 +411,8 @@ def _build_dataset_profile(
                     has_rare = int((vc < 0.01).sum())
                     if has_rare > 0:
                         parts.append(f"{has_rare} rare categories (<1%)")
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("[llm_method_config] Categorical stats failed for '%s': %s", qi, exc)
 
         null_pct = series.isna().mean() * 100
         if null_pct > 5:
@@ -441,8 +441,8 @@ def _build_dataset_profile(
                 parts.append(f"range {non_null.min()}-{non_null.max()}")
                 skew = round(float(non_null.skew()), 1)
                 parts.append(f"skewness={skew}")
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("[llm_method_config] Sensitive stats failed for '%s': %s", sc, exc)
 
         if dual:
             parts.append("dual-role warning")

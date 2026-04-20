@@ -175,7 +175,8 @@ def _build_column_metadata(
             meta["sample_values"] = [
                 str(v)[:50] for v in sample_vals[:7]
             ]
-        except Exception:
+        except (ValueError, TypeError, KeyError) as exc:
+            logger.warning("Sample value extraction failed for '%s': %s", col, exc)
             meta["sample_values"] = []
 
         # Semantic type hints for domain-aware classification
@@ -209,16 +210,16 @@ def _build_column_metadata(
                 meta["min"] = float(non_null.min())
                 meta["max"] = float(non_null.max())
                 meta["skewness"] = round(float(non_null.skew()), 2)
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("Numeric stats failed for '%s': %s", col, exc)
         else:
             try:
                 top_3 = non_null.value_counts().head(3)
                 meta["top_3_values"] = {
                     str(k): int(v) for k, v in top_3.items()
                 }
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("Top-3 value extraction failed for '%s': %s", col, exc)
 
         metadata.append(meta)
 

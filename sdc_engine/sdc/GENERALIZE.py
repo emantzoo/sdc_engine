@@ -33,6 +33,8 @@ import sys
 import io
 import pandas as pd
 
+_log = logging.getLogger(__name__)
+
 # Fix Windows cp1252 crash on Greek/Unicode column names in print().
 # Use a wrapper that checks .closed before every write instead of
 # permanently replacing sys.stdout (which breaks inside Streamlit when
@@ -57,8 +59,8 @@ class _SafeStdout(io.TextIOWrapper):
 if sys.stdout and hasattr(sys.stdout, 'buffer'):
     try:
         sys.stdout = _SafeStdout(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    except Exception:
-        pass
+    except (AttributeError, TypeError, ValueError):
+        pass  # stdout not wrappable — keep default
 import numpy as np
 from typing import List, Dict, Optional, Tuple, Union
 import warnings
@@ -333,8 +335,8 @@ def apply_generalize(
                     if parsed.notna().sum() / len(sample) > 0.8:
                         col = pd.to_datetime(col, errors='coerce', dayfirst=True)
                         is_datetime = True
-                except Exception:
-                    pass
+                except (ValueError, TypeError, OverflowError) as exc:
+                    _log.warning("[GENERALIZE] %s: date string detection failed: %s", qi, exc)
 
         # Log after type detection so the resolved type is accurate
         _type_str = 'numeric' if is_numeric else ('datetime' if is_datetime else 'categorical')
@@ -396,7 +398,8 @@ def apply_generalize(
             # to prevent equal-width bins from collapsing everything into one bin
             try:
                 _skew = abs(float(col.skew()))
-            except Exception:
+            except (ValueError, TypeError) as exc:
+                _log.warning("[GENERALIZE] %s: skewness calculation failed: %s", qi, exc)
                 _skew = 0.0
             _use_quantile = _skew > 3.0  # skew > 3 → quantile binning
 
@@ -431,7 +434,8 @@ def apply_generalize(
                         gen = _generalize_numeric_column(col, bs)
                     try:
                         corr = abs(col.corr(gen.astype(float)))
-                    except Exception:
+                    except (ValueError, TypeError) as exc:
+                        _log.warning("[GENERALIZE] %s: correlation calculation failed: %s", qi, exc)
                         corr = 0
                     all_gens.append((n_bins, gen, bs, corr))
                 if _use_quantile:

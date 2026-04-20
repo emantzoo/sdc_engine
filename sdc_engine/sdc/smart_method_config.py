@@ -62,7 +62,8 @@ def suggest_kanon_config(
     # Single groupby to get equivalence class sizes
     try:
         groups = data.groupby(qi_in_df, dropna=False).size()
-    except Exception:
+    except (ValueError, TypeError, KeyError) as exc:
+        log.warning("[SmartConfig] Groupby failed: %s", exc)
         return {'starting_k': target_k, 'strategy': 'generalization_dominant',
                 'strategy_reason': 'Groupby failed', 'warnings': [],
                 'estimated_suppression_rate': 0, 'switch_method': None,
@@ -186,8 +187,8 @@ def suggest_locsupr_config(
                 for qi in qi_in_df:
                     qi_violation_exposure[qi] = int(
                         data.loc[at_risk_mask, qi].nunique())
-    except Exception:
-        pass
+    except (ValueError, TypeError, KeyError) as exc:
+        log.warning("[SmartConfig] QI violation exposure calculation failed: %s", exc)
 
     # Cell-level suppression estimate
     est_cell_supp = 0.0
@@ -412,8 +413,8 @@ def suggest_noise_config(
                                 f"Noise will likely break '{qa}' ↔ '{qb}' "
                                 f"correlation ({orig_r:.2f} → {est_r:.2f}). "
                                 f"Consider reducing noise on the lighter QI.")
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as exc:
+            log.warning("[SmartConfig/NOISE] Correlation analysis failed: %s", exc)
 
     if corr_warnings:
         warnings.extend(corr_warnings)

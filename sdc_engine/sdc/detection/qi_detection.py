@@ -10,9 +10,12 @@ Scoring Dimensions:
 3. Uniqueness contribution (35%) - How much column increases re-identification risk
 """
 
+import logging
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Union
+
+_log = logging.getLogger(__name__)
 
 from .column_types import identify_column_types
 from ..config import QI_KEYWORDS, QI_KEYWORDS_GR, QI_SCORING_WEIGHTS, QI_CONFIDENCE_TIERS
@@ -472,7 +475,8 @@ def _score_uniqueness_contribution(
         qis_with = potential_qis[:4] + [column]
         groups_with = full_data.groupby(qis_with, observed=True).size()
         uniqueness_with = (groups_with == 1).sum() / len(full_data)
-    except Exception:
+    except (ValueError, TypeError, KeyError) as exc:
+        _log.warning("[qi_detection] Uniqueness-with calculation failed: %s", exc)
         result['score'] = 0.4
         result['reasons'].append("Cannot calculate uniqueness with column")
         return result
@@ -482,7 +486,8 @@ def _score_uniqueness_contribution(
         qis_without = potential_qis[:4]
         groups_without = full_data.groupby(qis_without, observed=True).size()
         uniqueness_without = (groups_without == 1).sum() / len(full_data)
-    except Exception:
+    except (ValueError, TypeError, KeyError) as exc:
+        _log.warning("[qi_detection] Uniqueness-without calculation failed: %s", exc)
         uniqueness_without = 0.0
 
     # Calculate contribution
@@ -529,8 +534,8 @@ def _is_sequential_id(series: pd.Series) -> bool:
         if len(unique_diffs) <= 3 and np.all(unique_diffs > 0) and np.all(unique_diffs <= 10):
             if series.nunique() / len(series) > 0.95:
                 return True
-    except Exception:
-        pass
+    except (ValueError, TypeError) as exc:
+        _log.warning("[qi_detection] Sequential ID check failed: %s", exc)
 
     return False
 

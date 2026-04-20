@@ -14,10 +14,13 @@ everywhere (Configure table, utility metrics, relationship checks, etc.).
 """
 from __future__ import annotations
 
+import logging
 import re
 from typing import Optional
 
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 from sdc_engine.sdc.config import (
     COLUMN_TYPE_KEYWORDS,
@@ -324,7 +327,8 @@ def _classify_float(
     else:
         try:
             rng = f'{col.min():.1f}\u2013{col.max():.1f}'
-        except Exception:
+        except (ValueError, TypeError) as exc:
+            _log.warning("[column_types] Range formatting failed: %s", exc)
             rng = 'range'
         return f'Float — Continuous ({rng})'
 

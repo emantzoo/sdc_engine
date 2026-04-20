@@ -21,12 +21,15 @@ Author: TA2501 Project
 Date: December 2025
 """
 
+import logging
 import pandas as pd
 import numpy as np
 import warnings
 import hashlib
 import re
 from typing import Dict, List, Optional, Tuple, Union, Any
+
+_log = logging.getLogger(__name__)
 
 # =============================================================================
 # CONFIGURATION
@@ -1667,9 +1670,8 @@ def preprocess_for_sdc(
                 rules['generalize']['enabled'] = True
             if 'apply_generalize' in recs or 'generalize' in recs:
                 rules['generalize']['enabled'] = True
-        except Exception:
-            # Silently continue with defaults if report generation fails
-            pass
+        except (ValueError, TypeError, KeyError) as exc:
+            _log.warning("[Preprocessing] Smart defaults report generation failed: %s", exc)
     
     # =========================================================================
     # Per-QI treatment: build treatment-scaled parameter dicts
@@ -1775,8 +1777,8 @@ def preprocess_for_sdc(
                             ).notna().sum()
                         if date_ct / len(sample) > 0.8:
                             return True
-                    except Exception:
-                        pass
+                    except (ValueError, TypeError, OverflowError):
+                        pass  # Not a date column
             return False
 
         categorical_qis = [

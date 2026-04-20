@@ -5,9 +5,12 @@ Utility Metrics
 Calculate utility preservation metrics for protected data.
 """
 
+import logging
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 def calculate_information_loss(
@@ -293,8 +296,8 @@ def calculate_utility_metrics(
                     mean_diff = abs(orig_valid.mean() - prot_valid.mean())
                     numeric_loss += mean_diff / orig_std
                     n_numeric_valid += 1
-        except Exception:
-            pass
+        except (ValueError, TypeError) as exc:
+            _log.warning("[utility_metrics] Numeric loss calculation failed for '%s': %s", col, exc)
 
     if n_numeric_valid > 0:
         metrics['numeric_info_loss'] = min(numeric_loss / n_numeric_valid, 1.0)
@@ -317,8 +320,8 @@ def calculate_utility_metrics(
                 changed = (orig_str != prot_str).mean()
                 cat_change_rate += changed
                 n_categorical += 1
-        except Exception:
-            pass
+        except (ValueError, TypeError) as exc:
+            _log.warning("[utility_metrics] Categorical change rate failed for '%s': %s", col, exc)
 
     if n_categorical > 0:
         metrics['categorical_change_rate'] = cat_change_rate / n_categorical
@@ -354,7 +357,8 @@ def calculate_utility_metrics(
                 corr_score = max(0, 1 - np.nanmean(corr_diff))
             else:
                 corr_score = 0.5
-        except Exception:
+        except (ValueError, TypeError) as exc:
+            _log.warning("[utility_metrics] Correlation preservation failed: %s", exc)
             corr_score = 0.5
         # Weight by fraction of numeric cols that survived (weren't generalized)
         if len(numeric_cols_orig) > 0:
@@ -381,8 +385,8 @@ def calculate_utility_metrics(
                     mean_errors.append(max(0, 1 - min(rel_error, 1)))
                 else:
                     mean_errors.append(1.0 if abs(prot_mean) < 0.001 else 0.5)
-        except Exception:
-            pass
+        except (ValueError, TypeError) as exc:
+            _log.warning("[utility_metrics] Mean preservation failed for '%s': %s", col, exc)
     # Each generalized col has completely lost its mean
     for _ in generalized_cols:
         mean_errors.append(0.0)
@@ -405,8 +409,8 @@ def calculate_utility_metrics(
                     prot_hist = prot_hist / prot_hist.sum()
                     similarity = max(0, 1 - np.mean(np.abs(orig_hist - prot_hist)) / 2)
                     dist_similarities.append(similarity)
-        except Exception:
-            pass
+        except (ValueError, TypeError) as exc:
+            _log.warning("[utility_metrics] Distribution similarity failed for '%s': %s", col, exc)
     # Each generalized col has completely lost its distribution
     for _ in generalized_cols:
         dist_similarities.append(0.0)
