@@ -470,11 +470,14 @@ if st.button("Preview Risk", type="secondary"):
 reid = st.session_state.get("reid_preview")
 if reid:
     risk_badge(reid.get("reid_95", 0))
+    max_risk = reid.get("max_risk", 0)
+    min_k = int(1 / max_risk) if max_risk > 0 else 0
     metric_cards({
         "ReID 50th": reid.get("reid_50", 0),
         "ReID 95th": reid.get("reid_95", 0),
         "ReID 99th": reid.get("reid_99", 0),
         "High-risk records": f"{reid.get('high_risk_rate', 0):.1%}",
+        "min k": min_k,
     })
 
     qis_str = ", ".join(f"`{q}`" for q in qis)
