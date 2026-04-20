@@ -95,6 +95,8 @@ All thresholds were tuned against Greek property/demographic datasets during dev
 
 **Current confidence:** Medium-high. The lowering was specifically for RC4 (bottleneck → GENERALIZE + kANON k=3), which makes sense at 15%. RC1-RC3 firing at 15% is a side effect, not the intent.
 
+> **Post-investigation note (2026-04-20):** RC4 is perpetually preempted by RC1 under the current backward elimination contribution metric — the bottleneck pattern (15-39% top contribution) never arises because minimum contribution for any k≥2 QI is 50%. The gate lowering to 0.15 therefore only benefits RC1 in practice. See `docs/investigations/spec_16_readiness_rc_family_preemption.md`.
+
 ---
 
 ## P2: Parameter Calibration Thresholds
@@ -716,7 +718,7 @@ Key findings during builder construction (2026-04-20):
 - **RC rules (RC1-RC4) now fire organically** for small-to-medium datasets. Spec 07 added lazy `var_priority` computation to `build_data_features()` — for datasets up to 10,000 rows with ≤8 QIs, per-QI risk contribution is computed via leave-one-out reid_95 and the resulting `var_priority` populates `features['var_priority']` and `features['risk_concentration']`. For larger datasets, the performance guard skips the computation and RC rules remain dormant — the engine then falls through to QR/LOW rules.
 - **HR1-HR5 remain dormant** — they depend on `uniqueness_rate` which is not populated in the feature pipeline. Tests for HR1-HR5 inject the feature manually via feature-injection (see `TestUniquenessRiskRules` in the known-case suite).
 - **DYN_CAT_Pipeline preempts CAT2.** The pipeline_rules check fires before rule_factories, so `CAT2_Mixed_Categorical_Majority` is unreachable when `DYN_CAT_Pipeline` has the same condition.
-- **QR0 (GENERALIZE_FIRST) is skipped under reid95.** `GENERALIZE_FIRST` is not in `METRIC_ALLOWED_METHODS['reid95']`, so infeasible datasets fall through to HR-series or DEFAULT.
+- **QR0 (GENERALIZE_FIRST) ~~is skipped under reid95~~.** Pre-Fix 0 data — `GENERALIZE_FIRST` was missing from `METRIC_ALLOWED_METHODS` for all metrics, so QR0 was silently config-blocked. Fixed 2026-04-20: GENERALIZE and GENERALIZE_FIRST added to all 4 metric lists. See `tests/empirical/fixtures/README.md` Change History.
 
 Run: `python -m pytest tests/test_rule_selection_known_cases.py -v` (~1.5s, no R/sdcMicro required).
 

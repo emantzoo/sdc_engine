@@ -487,7 +487,7 @@ Gate: `reid_95 > 0.15` (lowered from 0.20 to allow RC4 which fires at 15%). RC1�
 | RC3 | 3+ HIGH QIs (spread high) | kANON | k=7–10, generalisation |
 | RC4 | 1 HIGH + 3+ others (bottleneck) | GENERALIZE bottleneck → kANON k=3 |
 
-**Activation status (as of 2026-04):** RC1-RC4 fire organically on datasets ≤10k rows and ≤8 QIs (performance guard from `config.py:VAR_PRIORITY_COMPUTATION`). HR1-HR5 remain dormant pending `uniqueness_rate` population in the feature pipeline — they are unit-tested via feature injection (see `tests/test_rule_selection_known_cases.py::TestUniquenessRiskRules`).
+**Activation status (as of 2026-04):** RC1 fires organically on datasets ≤10k rows and ≤8 QIs (performance guard from `config.py:VAR_PRIORITY_COMPUTATION`). RC2, RC3, and RC4 are perpetually preempted by RC1 under the current backward elimination contribution metric — see `docs/investigations/spec_16_readiness_rc_family_preemption.md` for algebra and empirical verification. RC4 was also config-blocked (GENERALIZE missing from `METRIC_ALLOWED_METHODS`) until Fix 0 (2026-04-20); see `tests/empirical/fixtures/README.md` Change History. HR1-HR5 remain dormant pending `uniqueness_rate` population in the feature pipeline — they are unit-tested via feature injection (see `tests/test_rule_selection_known_cases.py::TestUniquenessRiskRules`).
 
 #### Context-Aware Rules (Access Tier Gated)
 

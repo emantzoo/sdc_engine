@@ -678,12 +678,18 @@ METHOD_FALLBACK_ORDER: Dict[str, List[str]] = {
 # properties, so they are blocked when the user targets k-anonymity or
 # uniqueness.  ReID (REID95) is universal.  l-diversity allows PRAM
 # (perturbation of sensitive values increases diversity) but blocks NOISE.
+#
+# GENERALIZE / GENERALIZE_FIRST are non-perturbative recoding methods
+# (merge categories).  They preserve frequency counts and are compatible
+# with every metric.  Missing from this list caused GEO1, RC4, and QR0
+# to be silently rejected by _all_allowed() / _is_allowed().
+# Fix 0 (pre-Spec 16): added 2026-04-20.
 
 METRIC_ALLOWED_METHODS: Dict[str, List[str]] = {
-    'reid95': ['kANON', 'LOCSUPR', 'PRAM', 'NOISE'],
-    'k_anonymity': ['kANON', 'LOCSUPR'],
-    'uniqueness': ['kANON', 'LOCSUPR'],
-    'l_diversity': ['kANON', 'LOCSUPR', 'PRAM'],
+    'reid95': ['kANON', 'LOCSUPR', 'PRAM', 'NOISE', 'GENERALIZE', 'GENERALIZE_FIRST'],
+    'k_anonymity': ['kANON', 'LOCSUPR', 'GENERALIZE', 'GENERALIZE_FIRST'],
+    'uniqueness': ['kANON', 'LOCSUPR', 'GENERALIZE', 'GENERALIZE_FIRST'],
+    'l_diversity': ['kANON', 'LOCSUPR', 'PRAM', 'GENERALIZE', 'GENERALIZE_FIRST'],
 }
 
 

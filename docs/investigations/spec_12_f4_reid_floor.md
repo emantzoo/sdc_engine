@@ -78,7 +78,7 @@ The math: even with perfect k-anonymity at k=12 (which would require collapsing 
 | reid_after | 1.0 (unchanged) |
 | Floor | Cannot reduce — every record is structurally unique |
 
-With 5 continuous QIs and 1080 records, the QI space is so large that even aggressive binning can't create meaningful equivalence classes. The QR0 rule correctly routes this to `GENERALIZE_FIRST`, but the floor persists.
+With 5 continuous QIs and 1080 records, the QI space is so large that even aggressive binning can't create meaningful equivalence classes. The QR0 rule correctly routes this to `GENERALIZE_FIRST`, but the floor persists. (Note: QR0 was silently config-blocked before Fix 0 (2026-04-20) because GENERALIZE_FIRST was missing from `METRIC_ALLOWED_METHODS`. This claim is valid post-Fix 0.)
 
 ### free1 (Real Data)
 
