@@ -141,42 +141,89 @@ RC and QR paths observed in synthetic data (Finding 2) is irrelevant
 in production — RC rules don't compete with other tiers because they're
 gated out before evaluation.
 
-### Finding 3a: CAT1 routes greek_mid to PRAM, which increases risk
+### Finding 3a: CAT1 method selection concern — PRAM increases reid
 
-**Verified by direct PRAM application on greek_mid (41742 rows, 4 QIs,
-cat_ratio=1.00):**
+**3a.1 — The observation.**
 
-PRAM changed 22,951 cells across all 4 QIs (10-17% per column). But
-it fragmented the equivalence class structure instead of consolidating it:
+On both real datasets where CAT1 is eligible (cat_ratio >= 0.70),
+forcing the CAT1 path shows PRAM increases reid_95 rather than
+decreasing it:
 
-| Metric | Before PRAM | After PRAM |
-|--------|------------|------------|
-| Equivalence classes | 2,611 | 6,727 (+2.6x) |
-| Unique records (size-1) | 736 | 3,643 (+5x) |
-| reid_50 | 0.010 | 0.033 |
-| reid_95 | 0.333 | **1.000** |
+| | greek_mid | adult_mid |
+|--|----------|----------|
+| Rows | 41,742 | 30,162 |
+| cat_ratio | 1.00 | 0.75 |
+| Natural rule | CAT1 | MED1 (not CAT1) |
+| Cells changed by PRAM | 22,951 (10-17%/col) | 14,071 (5-20%/col) |
+| Eq classes before | 2,611 | 1,690 |
+| Eq classes after | 6,727 (+2.6x) | 2,304 (+1.4x) |
+| Unique records before | 736 | 543 |
+| Unique records after | 3,643 (+5x) | 763 (+1.4x) |
+| reid_95 before | 0.333 | 0.250 |
+| reid_95 after | **1.000** | **0.333** |
 
-PRAM perturbs categorical values by reassigning them probabilistically.
-On microdata measured by reid_95 (record-level uniqueness = 1/eq_class_size),
-this scatters records OUT of existing equivalence classes into new,
-previously-empty QI combinations, making records MORE unique, not less.
+Consistent direction on N=2: PRAM modified QI columns but reid_95
+increased in both cases. greek_mid's damage is catastrophic
+(0.33 → 1.0); adult_mid's is moderate (0.25 → 0.33). The smaller
+magnitude on adult_mid may reflect that its continuous QI (age,
+nunique=72) already creates high baseline fragmentation, limiting
+PRAM's marginal impact — though this would need testing on
+additional datasets to confirm.
 
-This is not a parameter or configuration issue — it is a method-data
-mismatch. PRAM reduces disclosure risk in frequency tables (where
-individual values become unreliable) but increases record-level
-re-identification risk in microdata (where it fragments the grouping
-structure). CAT1 routes high-cat-ratio microdata to PRAM, which is
-the wrong method for this data shape when the risk metric is reid_95.
+**3a.2 — Proposed mechanism (hypothesis).**
 
-The retry engine rescued the outcome by detecting PRAM's failure
-(reid 1.0 > target 0.05, recognized as "need structural method") and
-falling back to kANON (reid=0.037). Without the retry engine, this
-dataset would have shipped with reid=1.0 — worse than unprotected.
+PRAM perturbs categorical values by probabilistically reassigning
+them to other categories. Because reid_95 measures the size of each
+record's equivalence class (records with identical QI values),
+creating new QI combinations means smaller classes, which means
+higher reid_95. PRAM moves records into combinations that previously
+had zero occurrences, fragmenting the grouping structure.
 
-**This observation motivates Family 2's investigation of CAT1 method
-selection.** The question is not just whether the 0.70 cat_ratio threshold
-is calibrated correctly, but whether CAT1 should route to PRAM at all
-when the risk metric is reid_95.
+This failure mode may be specific to the reid_95 metric (which
+penalizes fragmentation directly) or may reflect a broader mismatch
+between PRAM and microdata. PRAM is designed to make individual cell
+values unreliable, which reduces frequency-based disclosure risk.
+But on record-level microdata, the perturbation creates new
+equivalence classes rather than consolidating existing ones. Whether
+this matters depends on how risk is measured.
+
+**3a.3 — Engine protection (the self-correcting story).**
+
+The rules engine's priority ordering and retry engine together mask
+most of the user-visible damage from CAT1's method choice:
+
+- **adult_mid:** MED1 fires before CAT1 in natural routing (priority
+  ordering), so users get MED1/kANON (reid=0.039) rather than
+  CAT1/PRAM (reid=0.333). The engine avoids the problem entirely.
+
+- **greek_mid:** CAT1 fires naturally (no higher-priority rule
+  matches). PRAM fails catastrophically (reid 1.0), but the retry
+  engine detects the failure ("need structural method") and falls
+  back to kANON (reid=0.037). Users get correct protection.
+
+Users of the engine are protected in both cases. CAT1's method
+choice is a latent issue — it costs one wasted PRAM attempt per run
+on CAT1-eligible datasets — not an active failure that produces bad
+output.
+
+**3a.4 — Scope and limitations.**
+
+N=2 with consistent direction. Both datasets are categorical-heavy
+microdata. The finding may not generalize to: (a) other risk metrics
+like k-anonymity, where PRAM's perturbation may not fragment classes
+in the same way; (b) datasets with different cardinality
+distributions; (c) other PRAM configurations (different p_change,
+different prior matrices). Wider testing on 5+ CAT1-eligible
+datasets would strengthen or scope the finding.
+
+**This observation changes Family 2's scope.** Calibrating the 0.70
+cat_ratio threshold for a rule whose primary method increases reid
+does not produce useful results — lowering the threshold routes more
+datasets to the problem, raising it reduces exposure but doesn't fix
+the method choice. The productive next step is investigating whether
+CAT1 should route to PRAM at all on microdata under reid_95, which
+is a method-selection question rather than a threshold-calibration
+question.
 
 ### Finding 4: Mathematical floor on reid reduction
 
@@ -241,12 +288,15 @@ warranted** because:
 - **On testdata (4580 rows), RC1 fires organically and works as
   designed** — selects LOCSUPR, escalates to k=20, meets target with
   reid=0.044 and util=1.000.
-- **CAT1 routes greek_mid to PRAM, which increases reid from 0.33 to
-  1.0** (Finding 3a). PRAM fragments the equivalence class structure
-  on microdata — unique records grew from 736 to 3,643. The retry
-  engine rescued the outcome via kANON fallback. This is a method-data
-  mismatch: PRAM is wrong for high-cat-ratio microdata when the risk
-  metric is reid_95. This motivates Family 2.
+- **PRAM increases reid on both CAT1-eligible real datasets tested**
+  (Finding 3a). On greek_mid: reid 0.33 → 1.0, eq classes 2.6x more
+  fragmented. On adult_mid: reid 0.25 → 0.33, eq classes 1.4x.
+  Consistent direction, N=2. The engine's priority ordering (MED1
+  fires before CAT1 on adult_mid) and retry engine (kANON fallback
+  on greek_mid) mask the user-visible damage. CAT1's method choice
+  is a latent issue, not an active failure. Wider testing needed
+  before concluding systematic. This changes Family 2's scope from
+  threshold calibration to method-selection investigation.
 - **On synthetic data where we force-inject var_priority, RC rules and
   QR fallthrough produce Pareto-incomparable tradeoffs** (reid vs utility),
   not Pareto-superior ones. But this synthetic finding doesn't generalize
@@ -265,7 +315,18 @@ warranted** because:
    engine outcomes on large real datasets are already excellent
    (adult_mid: reid=0.039, util=0.993), so the case for raising the
    threshold is not obvious.
-3. **Future calibration studies** should jointly test all four
+3. **CAT1's method selection warrants investigation before Family 2
+   threshold calibration proceeds.** PRAM increased reid on both
+   CAT1-eligible real datasets tested (Finding 3a). Calibrating the
+   0.70 cat_ratio threshold while CAT1's primary method increases
+   reid does not produce useful results — lowering the threshold
+   routes more datasets to the problem, raising it reduces exposure
+   without fixing the method choice. The productive next step is
+   establishing whether CAT1 should route to PRAM at all on microdata
+   under reid_95. This is a method-selection question, separate from
+   threshold calibration, and should be scoped as its own
+   investigation before Family 2 proceeds.
+4. **Future calibration studies** should jointly test all four
    concentration patterns and use real datasets with organic correlation
    structure. Given Findings 2 and 3, it is unclear whether the 40%/60%
    thresholds are empirically calibratable — RC rules rarely fire on
