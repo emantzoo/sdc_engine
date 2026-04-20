@@ -176,7 +176,7 @@ Below the role table:
 
 - **Preview Risk** button — runs `calculate_reid()` on selected QIs and shows:
   - Risk badge (color-coded: LOW, MODERATE, HIGH, VERY HIGH)
-  - Metric cards: ReID 50th/95th/99th percentile, high-risk rate
+  - Metric cards: ReID 50th/95th/99th percentile, high-risk rate, min k (minimum k-anonymity level, derived from 1/max_risk)
 
 - **Confirm Configuration** button — finalizes column roles, recovers numeric/datetime types from text, and unlocks the Protect page
 
@@ -204,7 +204,7 @@ Actions vary by detected column type:
 | **Categorical** | Generalize (top-K), None | Occupation (50 unique) → top 15 + Other |
 
 Two buttons:
-- **Apply Preprocessing** — executes the plan, shows before/after cardinality per column
+- **Apply Preprocessing** — executes the plan, shows before/after cardinality per column and a collapsible QI distribution comparison (histograms for numeric, grouped bars for categorical)
 - **Skip Preprocessing** — bypasses preprocessing, uses raw data for protection
 
 ### 4.2 Protection Mode
@@ -234,11 +234,16 @@ Click **Run Protection** to execute.
 After protection completes:
 
 1. **Result badge** — Success/Fail with method name (e.g., "kANON succeeded")
-2. **Metric cards with deltas** — ReID 95th (before → after), Utility score, Method name
+2. **Metric cards with deltas** — ReID 95th (before → after), Utility score, Method name, min k
 3. **Risk badge** — color-coded risk level after protection
-4. **Before/After risk histogram** — Plotly overlay showing per-record risk distribution shift
-5. **Sample data comparison** — first 10 rows of original vs protected QI columns
-6. **Preprocessing applied** — per-column action summary (if preprocessing ran)
+4. **Enhanced risk histogram** — Plotly overlay showing per-record risk distribution shift, with vertical percentile lines (50th/95th/99th) for both before and after distributions
+5. **Retry engine trajectory** (Smart Combo only) — two-axis line plot showing ReID 95th and utility across retry iterations, with target lines and method labels; appears in a collapsible expander when ≥2 attempts were made
+6. **QI distribution comparison** — per-QI before/after plots in a collapsible expander with radio selector:
+   - *Original vs Protected* (always available)
+   - *Original vs Preprocessed* and *Preprocessed vs Protected* (when preprocessing was applied)
+   - Numeric QIs show overlaid histograms; categorical QIs show grouped bar charts (top 15 categories + "Other")
+7. **Sample data comparison** — first 10 rows of original vs protected QI columns
+8. **Preprocessing applied** — per-column action summary (if preprocessing ran)
 
 ### 4.4 Privacy Metrics
 
@@ -264,11 +269,28 @@ A collapsible **Utility Report** expander provides detailed analysis:
 - **Cross-Tab Benchmark** — means, variances, frequency TVD, correlation preservation
 - **Distributional Metrics** — KL divergence, Hellinger distance per variable
 - **Information Loss (IL1s)** — per-record distortion measure
-- **Auto-Diagnostics** — QI utility comparison, method quality assessment
+- **Auto-Diagnostics** — QI utility comparison table + per-QI utility delta bar chart (color-coded: green <5% drop, amber 5–20%, red >20%), method quality assessment
 
 **QI Over-Suppression Warnings** appear as a yellow warning box when any QI loses >20% of its values during protection, listing affected columns and suppression percentages.
 
 **Protection Details** expander shows: rule applied, reasoning, parameters (JSON), and the last 20 engine log entries.
+
+### 4.6 Scenario Comparison
+
+The **Scenario Comparison** expander (below the main protection controls) lets you define 2–4 scenarios with different preprocessing plans and/or protection methods, then run them all to compare results side by side.
+
+After running:
+
+1. **Summary table** — all scenarios in one table with key metrics
+2. **Best scenario badge** — highlights the scenario with the best risk-utility tradeoff
+3. **Radar chart** — spider chart comparing all scenarios on 4 normalized axes:
+   - *ReID Reduction* — how much risk was reduced (0=none, 1=fully eliminated)
+   - *Utility* — overall utility score
+   - *Low Suppression* — 1 minus suppression rate (higher = less data loss)
+   - *min k (normalized)* — minimum k-anonymity level, capped at 10 for normalization
+4. **Side-by-side metric cards** — per-scenario risk badge, utility, method, pass/fail
+5. **Drill-down tabs** — each scenario tab shows the full results display (Section 4.3) including all visualizations
+6. **"Use This Scenario" button** — promotes a scenario to the final result for download
 
 ---
 
@@ -276,12 +298,12 @@ A collapsible **Utility Report** expander provides detailed analysis:
 
 The **Download** page provides:
 
-1. **Summary cards** — method used, utility score, ReID 95th (after), row count, risk badge
+1. **Summary cards** — method used, utility score, ReID 95th (after), min k, row count, risk badge
 2. **Download Protected CSV** — exports the anonymized dataset as CSV
 3. **Download Summary Report (HTML)** — self-contained HTML report with:
    - Executive summary (PASS/FAIL, method, before/after metrics)
    - Dataset overview (file name, date, rows, columns)
-   - Before/after comparison table (ReID 95th/99th, high-risk rate, utility)
+   - Before/after comparison table (ReID 95th/99th, high-risk rate, utility, min k)
    - QIs and sensitive columns list
    - Privacy metrics table (k-anonymity, uniqueness, records at risk, l-diversity, t-closeness — before and after)
    - Per-variable utility table (when available)

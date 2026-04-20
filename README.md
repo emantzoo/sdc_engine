@@ -172,7 +172,7 @@ sdc_engine/                  # Core library
 streamlit_app/               # Streamlit web UI
   app.py                     #   Main entry point + sidebar (API key, sdcMicro toggle)
   state.py                   #   Session state defaults
-  components.py              #   Shared UI components
+  components.py              #   Shared UI components (risk charts, QI distributions, radar, trajectory)
   pages/
     1_Upload.py              #   Dataset upload
     2_Configure.py           #   Classification + risk + settings
@@ -234,6 +234,13 @@ Full specification: [Smart Rules Reference](docs/smart_rules_complete.md)
 
 ### Recent improvements (2026-04)
 
+- **Spec 10 Visualizations** -- 5 interactive Plotly charts on the Protect page:
+  - QI distribution comparison (overlaid histograms for numeric, grouped bars for categorical) with radio selector (Original/Preprocessed/Protected)
+  - Enhanced risk histogram with 50th/95th/99th percentile lines before and after
+  - Per-QI utility delta bar chart (color-coded green/amber/red by magnitude)
+  - Retry engine trajectory plot (two-axis ReID + utility across Smart Combo iterations)
+  - Scenario radar chart (4-axis comparison: ReID reduction, utility, suppression, min k)
+- **min k metric** -- derived from max per-record risk (1/max_risk), shown in Risk Preview, protection results, and HTML report
 - **Empirical validation harness** with cross-metric analysis (reid95, k_anonymity) -- 160 runs across 8 datasets
 - **sdcMicro parity test suite** -- 8 tests verifying Python vs R equivalence, all passing
 - **Context-aware routing rules** (PUB1, SEC1, REG1) tied to access tier
