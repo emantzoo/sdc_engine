@@ -14,6 +14,11 @@ fixtures (Spec 16a).
 
 **37 gates checked. 28 inside observed range. 9 outside.**
 
+> **Post-sweep update:** The Spec 18 feature-population sweep revealed that 8
+> of the 24 "live-unverified" rules are actually **unwired** — their gate
+> conditions depend on features that `build_data_features()` does not populate.
+> See the "Post-Sweep Corrections" section at the end of this document.
+
 Phases 2 (harness firing matrix) and 3 (counterfactual outcome measurement)
 were not run. Consequently, live/niche/redundant distinctions among firing
 rules are not measured — only structural reachability. Rules verdicted as
@@ -58,7 +63,7 @@ whether it improves outcomes. Phase 2 would upgrade these to live/niche/redundan
 
 ## Per-Rule Verdicts
 
-### Verdict vocabulary (8 verdicts)
+### Verdict vocabulary (9 verdicts)
 
 | Verdict | Meaning |
 |---|---|
@@ -69,6 +74,7 @@ whether it improves outcomes. Phase 2 would upgrade these to live/niche/redundan
 | **preempted** | Gate matches on some data but higher-priority rule always fires first. Probabilistic |
 | **preempted-always** | Structurally impossible given metric algebra. Not probabilistic |
 | **untriggered** | Gate not met by any harness dataset. May fire on production data |
+| **unwired** | Gate logic is valid but `build_data_features()` does not populate one or more required feature keys. Rule cannot fire in production without explicit injection. Added by Spec 18 sweep |
 | **unreachable** | Code path logically impossible. Self-contradictory gate |
 
 ### Pipeline rules
@@ -164,7 +170,10 @@ whether it improves outcomes. Phase 2 would upgrade these to live/niche/redundan
 
 ---
 
-## Summary Statistics
+## Summary Statistics (pre-sweep, superseded)
+
+> **Note:** These counts are superseded by the post-sweep revised statistics
+> below. See "Post-Sweep Corrections" section for the current breakdown.
 
 | Verdict | Count | Rules |
 |---|---|---|
@@ -250,7 +259,14 @@ All uniqueness_risk_rules require has_reid=False. The harness always computes
 ReID. These rules are defensive fallbacks for when ReID computation fails or
 is skipped. The uniqueness thresholds themselves are inside range.
 
-**Evidence:** Phase 1b analysis. Spec 15 Item 3 (HR1-HR5 dormant).
+**Evidence:** Phase 1b analysis.
+
+> **Correction (post-sweep):** Spec 15 Item 3 claimed HR1-HR5 were dormant
+> because `uniqueness_rate` was not populated. This was **incorrect**.
+> `build_data_features()` DOES populate `uniqueness_rate` (line 278).
+> HR1-HR5 are untriggered solely because `has_reid=True` in all harness
+> runs, and higher-priority rules (priority 11-12.5) fire first. See
+> `spec_18_feature_population_sweep.md` for the full correction.
 
 **Follow-up:** Accept as defensive code. No deletion needed — they serve
 a real purpose when ReID is unavailable. Could exercise with a
@@ -312,6 +328,62 @@ rules that may duplicate higher-priority rules' selections.
 **Risk of skipping:** Low. The rules most likely to be redundant (DP1-DP4)
 are already low-priority in the chain. Deleting them based on Phase 2 fire
 counts alone (if they never fire) would be safe.
+
+---
+
+## Post-Sweep Corrections (Spec 18 Feature-Population Sweep)
+
+**Added:** 2026-04-20, after Spec 18 Items 3-5.
+
+The Spec 18 feature-population sweep (see `spec_18_feature_population_sweep.md`)
+discovered that `build_data_features()` does not populate 7 feature keys that
+rules depend on via `features.get()`. This invalidates several verdicts above.
+
+A new verdict is introduced: **unwired** — the rule's gate logic is valid but
+one or more required features are not populated in the production path, so the
+rule cannot fire without explicit injection.
+
+### Verdict revisions
+
+| Rule | Original verdict | Revised verdict | Missing feature(s) | Evidence |
+|------|-----------------|-----------------|---------------------|----------|
+| GEO1 | live-unverified | **unwired** | `geo_qis_by_granularity` | Not in `build_data_features()` or `extract_data_features_with_reid()`. Only injected by fixture helper |
+| P4a | live-unverified | **unwired** | `has_sensitive_attributes`, `sensitive_column_diversity` | `has_sensitive_attributes` hardcoded `False` in `build_data_features()` line 281 |
+| P4b | live-unverified | **unwired** | `has_sensitive_attributes`, `sensitive_column_diversity` | Same as P4a |
+| DP3 | live-unverified | **unwired** | `has_sensitive_attributes` | Same hardcoded `False` |
+| LDIV1 | live-unverified | **unwired** | `sensitive_column_diversity`, `min_l` | `sensitive_column_diversity` returns `None`; `min_l` only via test overrides |
+| SR3 | niche (verified) | **unwired (niche if wired)** | `max_qi_uniqueness` | Not in `build_data_features()`. G10 fixture fires with injection |
+| DP4 | untriggered → tightened | **unwired + tightened** | `integer_coded_qis` | Defaults to `[]` (falsy). Threshold tightening was correct but insufficient |
+| DATE1 | untriggered → widened | **unwired + widened** | `qi_type_counts` | Defaults to `{}`. `n_date = 0` always. Threshold widening was correct but insufficient |
+
+### Verdicts confirmed unchanged
+
+| Rule | Verdict | Status |
+|------|---------|--------|
+| HR1-HR5 | untriggered | **Correct.** `uniqueness_rate` IS populated (line 278). Rules untriggered due to `has_reid=False` gate + priority preemption. Spec 15 Item 3's claim that `uniqueness_rate` was not populated was wrong |
+| RC2, RC3, RC4 | preempted-always | **Correct.** Not affected by feature gaps |
+| DYN_CAT | unreachable | **Correct.** NOISE/l_diversity contradiction is primary blocker |
+| CAT2 | preempted | **Correct.** Pipeline preemption is primary issue |
+| All other rules | (unchanged) | Not affected by feature-population gaps |
+
+### Revised summary statistics
+
+| Verdict | Count | Rules |
+|---|---|---|
+| live-unverified | 19 | DYN, P5, REG1×2, PUB1×2, SEC1×2, RC1, CAT1, QR0-QR4, MED1, LOW1-LOW3, DP1, DP2, DEFAULT |
+| **unwired** | **8** | **GEO1, P4a, P4b, DP3, LDIV1, SR3, DP4, DATE1** |
+| preempted-always | 3 | RC2, RC3, RC4 |
+| preempted | 1 | CAT2 |
+| unreachable | 1 | DYN_CAT_Pipeline |
+| untriggered | 6 | HR1-HR5, HR6 |
+| **Total** | **37** | |
+
+### Impact on Spec 18 follow-up table
+
+All proposed deletions (RC2/RC3/RC4, DYN_CAT, CAT2) are **paused**. The sweep
+revealed that 8 rules previously thought to be live or merely untriggered are
+actually unwired. The fix for these rules is to wire the missing features into
+`build_data_features()`, not to delete the rules. Scoped for Spec 19.
 
 ---
 
