@@ -101,35 +101,44 @@ with correlated QIs could show different behavior — targeted suppression
 (LOCSUPR) may outperform generic kANON when correlation allows it to
 suppress fewer records.
 
-### Finding 3: RC rules have very narrow activation scope in production
+### Finding 3: RC rules are unreachable on large datasets; other rules fire instead
 
-**Real dataset verification** (3 datasets, 3 paths each: natural, dominated, balanced):
+**Real dataset verification** — full log capture showing which rule
+actually fires on each dataset:
 
-| Dataset | Rows | QIs | reid_95 | var_priority | pattern | Outcome |
-|---------|------|-----|---------|-------------|---------|---------|
-| adult_mid | 30162 | 4 | 0.25 | **empty** | unknown | All paths identical (kANON, 0.039, 0.993) |
-| testdata | 4580 | 7 | 0.50 | populated | dominated | All paths converge (LOCSUPR, 0.044, 1.000) |
-| greek_mid | 41742 | 4 | 0.33 | **empty** | unknown | All paths identical (kANON, 0.037, 0.968) |
+| Dataset | Rows | Rule fired | Primary | Outcome |
+|---------|------|-----------|---------|---------|
+| adult_mid | 30162 | **MED1_Moderate_Structural** | kANON | reid=0.039, target met on first try |
+| testdata | 4580 | **RC1_Risk_Dominated** | LOCSUPR | reid=0.044, escalated k=5→20 |
+| greek_mid | 41742 | **CAT1_Categorical_Dominant** | PRAM→kANON | reid=0.037, PRAM failed, kANON fallback met target |
 
-**Root cause:** `_compute_var_priority()` has a hard threshold at
-`VAR_PRIORITY_COMPUTATION['max_n_records'] = 10,000` (config.py line 1081).
-Datasets exceeding 10K rows skip backward elimination entirely, returning
-`None` (masked as `{}` by the `or {}` fallback in build_data_features).
-With empty var_priority, RC rules never fire (pattern=unknown, applies=False).
+Rules fire on all three datasets — the engine is never in "pure fallthrough."
+The question is which *tier* of rules fires:
 
-On the one dataset where var_priority IS populated organically (testdata,
-4580 rows), all paths converge to the same outcome regardless of the
-counterfactual override — the retry engine normalizes the starting-point
-differences.
+- **testdata (4580 rows):** var_priority is populated (below 10K threshold),
+  RC1 fires organically, selects LOCSUPR, escalates to k=20, meets target.
+  This is RC rules working as designed.
+
+- **adult_mid (30162 rows):** var_priority empty (above 10K threshold),
+  RC rules skipped, MED1 fires instead. MED1 selects kANON which meets
+  target on first attempt with reid=0.039.
+
+- **greek_mid (41742 rows):** var_priority empty, RC rules skipped,
+  CAT1 fires (cat_ratio=1.00, reid_95=0.33). CAT1 selects PRAM as
+  primary, which fails (reid stays 1.0), then falls back to kANON.
+
+**Root cause of RC rule absence on large datasets:** `_compute_var_priority()`
+has a hard threshold at `max_n_records=10,000` (config.py line 1081).
+Datasets exceeding 10K rows skip backward elimination, leaving
+var_priority empty and RC rules dormant. Other rule tiers (MED, CAT)
+fire instead — the engine is not falling through to a default path.
 
 **Implication:** RC rules were unreachable on 2 of 3 real datasets
-tested, both exceeding 10K rows, due to the `max_n_records=10,000`
-guard. This suggests RC rules may be unreachable on most production-scale
-datasets, though a wider survey would be needed to confirm. On the one
-small dataset where RC rules do fire (testdata, 4580 rows), the retry
-engine absorbs routing differences — all paths converge to the same
-outcome. The Pareto tradeoff observed in synthetic data (Finding 2)
-does not appear on real data.
+tested, both exceeding 10K rows. MED and CAT rules handled these
+datasets successfully, achieving reid targets with high utility. The
+Pareto tradeoff between RC and QR paths observed in synthetic data
+(Finding 2) is irrelevant in production — RC rules don't compete with
+other tiers because they're gated out before evaluation.
 
 ### Finding 4: Mathematical floor on reid reduction
 
@@ -187,11 +196,13 @@ warranted** because:
 - **RC rules were unreachable on 2 of 3 real datasets tested** (both
   exceeding 10K rows). The `max_n_records=10,000` guard in
   `_compute_var_priority()` prevents backward elimination on larger
-  datasets, leaving var_priority empty and RC rules dormant. A wider
-  survey would be needed to confirm this is universal.
-- **On small datasets where RC rules DO fire, the retry engine absorbs
-  routing differences.** testdata (4580 rows) produces the same outcome
-  regardless of counterfactual.
+  datasets, leaving var_priority empty and RC rules dormant. Other rule
+  tiers (MED1, CAT1) fire instead — the engine is not falling through
+  to a default path. A wider survey would be needed to confirm this
+  pattern is universal.
+- **On testdata (4580 rows), RC1 fires organically and works as
+  designed** — selects LOCSUPR, escalates to k=20, meets target with
+  reid=0.044 and util=1.000.
 - **On synthetic data where we force-inject var_priority, RC rules and
   QR fallthrough produce Pareto-incomparable tradeoffs** (reid vs utility),
   not Pareto-superior ones. But this synthetic finding doesn't generalize
