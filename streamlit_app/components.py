@@ -135,3 +135,327 @@ def risk_histogram(scores_before: list, scores_after: list) -> go.Figure:
         margin=dict(t=40, b=40),
     )
     return fig
+
+
+# ── QI distribution comparison plots ────────────────────────────────
+
+def qi_distribution_plots(
+    original: pd.DataFrame,
+    protected: pd.DataFrame,
+    qis: list,
+    title: str = "QI Distribution Comparison",
+    key_prefix: str = "dist",
+    max_plots: int = 8,
+) -> None:
+    """Render per-QI distribution comparison charts (before vs after).
+
+    Numeric QIs get overlaid histograms; categorical/binned QIs get
+    grouped bar charts (top 15 categories + Other).
+    """
+    plot_qis = [q for q in qis if q in original.columns and q in protected.columns]
+    if len(plot_qis) > max_plots:
+        st.caption(f"Showing top {max_plots} of {len(plot_qis)} QIs.")
+        plot_qis = plot_qis[:max_plots]
+
+    if not plot_qis:
+        return
+
+    for i, col in enumerate(plot_qis):
+        orig_series = original[col].dropna()
+        prot_series = protected[col].dropna()
+        if len(orig_series) == 0 and len(prot_series) == 0:
+            continue
+
+        is_numeric = pd.api.types.is_numeric_dtype(original[col])
+
+        if is_numeric:
+            fig = go.Figure()
+            fig.add_trace(go.Histogram(
+                x=orig_series, nbinsx=30, name="Before",
+                marker_color="rgba(231,76,60,0.5)", opacity=0.6,
+            ))
+            fig.add_trace(go.Histogram(
+                x=prot_series, nbinsx=30, name="After",
+                marker_color="rgba(39,174,96,0.5)", opacity=0.6,
+            ))
+            fig.update_layout(
+                barmode="overlay",
+                title=col,
+                xaxis_title=col, yaxis_title="Count",
+                height=300, margin=dict(t=40, b=30, l=40, r=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            )
+        else:
+            # Categorical / binned: top 15 categories + Other
+            orig_counts = orig_series.value_counts()
+            prot_counts = prot_series.value_counts()
+            all_cats = orig_counts.index.union(prot_counts.index)
+
+            if len(all_cats) > 15:
+                top_cats = orig_counts.head(15).index
+                other_orig = orig_counts.loc[~orig_counts.index.isin(top_cats)].sum()
+                other_prot = prot_counts.loc[~prot_counts.index.isin(top_cats)].sum()
+                cats = list(top_cats) + ["Other"]
+                orig_vals = [orig_counts.get(c, 0) for c in top_cats] + [other_orig]
+                prot_vals = [prot_counts.get(c, 0) for c in top_cats] + [other_prot]
+            else:
+                cats = list(all_cats)
+                orig_vals = [orig_counts.get(c, 0) for c in cats]
+                prot_vals = [prot_counts.get(c, 0) for c in cats]
+
+            cats_str = [str(c) for c in cats]
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=cats_str, y=orig_vals, name="Before",
+                marker_color="rgba(231,76,60,0.7)",
+            ))
+            fig.add_trace(go.Bar(
+                x=cats_str, y=prot_vals, name="After",
+                marker_color="rgba(39,174,96,0.7)",
+            ))
+            fig.update_layout(
+                barmode="group",
+                title=col,
+                xaxis_title=col, yaxis_title="Count",
+                height=300, margin=dict(t=40, b=30, l=40, r=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            )
+
+        st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}_{i}")
+
+
+# ── Per-QI utility delta bar chart ──────────────────────────────────
+
+def qi_utility_delta_bar(qi_comparison: list, key: str = "qi_delta") -> None:
+    """Horizontal bar chart of per-QI utility deltas.
+
+    qi_comparison: list of dicts with keys 'qi', 'delta', 'verdict'.
+    Color-coded: green (<5% drop), amber (5-20%), red (>20%).
+    """
+    valid = [
+        q for q in qi_comparison
+        if isinstance(q.get("delta"), (int, float))
+    ]
+    if not valid:
+        return
+
+    # Sort by magnitude of delta (worst first)
+    valid.sort(key=lambda q: q["delta"])
+
+    qi_names = [q["qi"] for q in valid]
+    deltas = [q["delta"] for q in valid]
+    colors = []
+    for d in deltas:
+        abs_d = abs(d)
+        if abs_d < 0.05:
+            colors.append("#27ae60")  # green
+        elif abs_d < 0.20:
+            colors.append("#f39c12")  # amber
+        else:
+            colors.append("#e74c3c")  # red
+
+    fig = go.Figure(go.Bar(
+        x=deltas, y=qi_names, orientation="h",
+        marker_color=colors,
+        text=[f"{d:+.1%}" for d in deltas],
+        textposition="auto",
+    ))
+    fig.update_layout(
+        title="Per-QI Utility Change",
+        xaxis_title="Utility Delta",
+        xaxis=dict(tickformat=".0%"),
+        height=max(200, len(qi_names) * 35),
+        margin=dict(t=40, b=30, l=10, r=10),
+        yaxis=dict(autorange="reversed"),
+    )
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
+
+# ── Retry trajectory plot (P2) ──────────────────────────────────────
+
+def retry_trajectory_plot(
+    attempts: list,
+    reid_target: float = 0.10,
+    utility_floor: float = 0.70,
+    key: str = "retry_traj",
+) -> None:
+    """Two-axis line plot showing risk and utility across retry iterations.
+
+    attempts: list of dicts with keys 'attempt', 'final_reid_95', 'utility',
+              'method', 'tier_label', 'success'.
+    """
+    if not attempts or len(attempts) < 2:
+        return
+
+    x = list(range(1, len(attempts) + 1))
+    reid_vals = [a.get("final_reid_95", 0) for a in attempts]
+    util_vals = [a.get("utility", 0) for a in attempts]
+    methods = [a.get("method", "?") for a in attempts]
+    labels = [a.get("tier_label", f"Iter {i}") for i, a in enumerate(attempts, 1)]
+
+    fig = go.Figure()
+
+    # ReID line (left y-axis)
+    fig.add_trace(go.Scatter(
+        x=x, y=reid_vals, mode="lines+markers+text",
+        name="ReID 95th", marker=dict(size=8, color="#e74c3c"),
+        line=dict(color="#e74c3c", width=2),
+        text=[f"{r:.1%}" for r in reid_vals], textposition="top center",
+        hovertext=[f"{l}: {m}" for l, m in zip(labels, methods)],
+    ))
+
+    # Utility line (right y-axis)
+    fig.add_trace(go.Scatter(
+        x=x, y=util_vals, mode="lines+markers+text",
+        name="Utility", marker=dict(size=8, color="#3498db"),
+        line=dict(color="#3498db", width=2, dash="dot"),
+        text=[f"{u:.0%}" for u in util_vals], textposition="bottom center",
+        yaxis="y2",
+    ))
+
+    # Target lines
+    fig.add_hline(y=reid_target, line_dash="dash", line_color="rgba(231,76,60,0.4)",
+                  annotation_text=f"ReID target ({reid_target:.0%})")
+    fig.add_hline(y=utility_floor, line_dash="dash", line_color="rgba(52,152,219,0.4)",
+                  annotation_text=f"Utility floor ({utility_floor:.0%})")
+
+    # Method switch annotations
+    for i in range(1, len(methods)):
+        if methods[i] != methods[i - 1]:
+            fig.add_annotation(
+                x=i + 1, y=reid_vals[i], text=f"-> {methods[i]}",
+                showarrow=True, arrowhead=2, ax=0, ay=-30,
+                font=dict(size=10, color="#8e44ad"),
+            )
+
+    fig.update_layout(
+        title="Retry Trajectory",
+        xaxis=dict(
+            title="Iteration",
+            tickvals=x, ticktext=labels, tickangle=-30,
+        ),
+        yaxis=dict(title="ReID 95th", tickformat=".0%", range=[0, max(reid_vals) * 1.2]),
+        yaxis2=dict(
+            title="Utility", tickformat=".0%",
+            overlaying="y", side="right",
+            range=[0, 1.1],
+        ),
+        height=400,
+        margin=dict(t=40, b=80),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    )
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
+
+# ── Enhanced risk histogram with percentile lines (P4) ──────────────
+
+def risk_histogram_enhanced(
+    scores_before: list,
+    scores_after: list,
+    reid_before: dict = None,
+    reid_after: dict = None,
+    key: str = "risk_hist_enh",
+) -> None:
+    """Risk histogram with overlaid percentile lines."""
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=scores_before, nbinsx=50, name="Before",
+        marker_color="rgba(231,76,60,0.5)", opacity=0.6,
+    ))
+    fig.add_trace(go.Histogram(
+        x=scores_after, nbinsx=50, name="After",
+        marker_color="rgba(39,174,96,0.5)", opacity=0.6,
+    ))
+
+    # Percentile lines
+    if reid_before:
+        for pct, label_suffix in [(reid_before.get("reid_50"), "50th"),
+                                   (reid_before.get("reid_95"), "95th"),
+                                   (reid_before.get("reid_99"), "99th")]:
+            if pct:
+                fig.add_vline(x=pct, line_dash="dash", line_color="rgba(231,76,60,0.6)",
+                              annotation_text=f"B-{label_suffix}: {pct:.1%}",
+                              annotation_position="top left",
+                              annotation_font_size=9)
+    if reid_after:
+        for pct, label_suffix in [(reid_after.get("reid_50"), "50th"),
+                                   (reid_after.get("reid_95"), "95th"),
+                                   (reid_after.get("reid_99"), "99th")]:
+            if pct:
+                fig.add_vline(x=pct, line_dash="dot", line_color="rgba(39,174,96,0.7)",
+                              annotation_text=f"A-{label_suffix}: {pct:.1%}",
+                              annotation_position="bottom right",
+                              annotation_font_size=9)
+
+    fig.update_layout(
+        barmode="overlay",
+        title="Per-Record Risk Distribution (with percentiles)",
+        xaxis_title="Re-identification Risk",
+        yaxis_title="Count",
+        height=400,
+        margin=dict(t=40, b=40),
+    )
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
+
+# ── Scenario comparison radar chart (P5) ────────────────────────────
+
+def scenario_radar_chart(
+    scenarios: list,
+    results: list,
+    key: str = "scenario_radar",
+) -> None:
+    """Radar/spider chart comparing up to 4 scenarios on 4 axes.
+
+    scenarios: list of dicts with 'name'.
+    results: list of ProtectionResult objects.
+    Axes: ReID reduction, Utility, 1 - Suppression rate, min_k (normalized).
+    """
+    if not results or len(results) < 2:
+        return
+
+    categories = ["ReID Reduction", "Utility", "Low Suppression", "min k (norm)"]
+
+    fig = go.Figure()
+    colors = ["#e74c3c", "#3498db", "#27ae60", "#f39c12"]
+
+    for i, (sc, res) in enumerate(zip(scenarios, results)):
+        rb = res.reid_before or {}
+        ra = res.reid_after or {}
+        reid_before = rb.get("reid_95", 0)
+        reid_after = ra.get("reid_95", 0)
+
+        # ReID reduction: how much was risk reduced (0=none, 1=fully eliminated)
+        reid_reduction = max(0, (reid_before - reid_after) / reid_before) if reid_before > 0 else 0
+
+        # Utility
+        utility = res.utility_score or 0
+
+        # Suppression rate (inverted: 1 = no suppression)
+        supp_rate = ra.get("suppression_rate", 0) or 0
+        low_suppression = 1.0 - supp_rate
+
+        # min_k normalized: cap at 10 for normalization
+        max_risk = ra.get("max_risk", 0)
+        min_k = int(1 / max_risk) if max_risk > 0 else 0
+        min_k_norm = min(min_k / 10.0, 1.0)
+
+        vals = [reid_reduction, utility, low_suppression, min_k_norm]
+        # Close the polygon
+        vals_closed = vals + [vals[0]]
+        cats_closed = categories + [categories[0]]
+
+        fig.add_trace(go.Scatterpolar(
+            r=vals_closed, theta=cats_closed,
+            fill="toself", name=sc["name"],
+            line_color=colors[i % len(colors)],
+            opacity=0.6,
+        ))
+
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 1], tickformat=".0%")),
+        title="Scenario Comparison",
+        height=450,
+        margin=dict(t=60, b=30),
+    )
+    st.plotly_chart(fig, use_container_width=True, key=key)

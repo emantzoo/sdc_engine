@@ -15,8 +15,12 @@ from state import require_step
 from components import (
     metric_cards_delta,
     risk_badge,
-    risk_histogram,
+    risk_histogram_enhanced,
     recover_numeric_types,
+    qi_distribution_plots,
+    qi_utility_delta_bar,
+    retry_trajectory_plot,
+    scenario_radar_chart,
 )
 
 require_step("configure", "Please **configure column roles** first.")
@@ -397,12 +401,45 @@ def _display_result(result, qis, sensitive, orig_data=None, log_entries=None,
 
     st.divider()
 
-    # Risk histogram
+    # Risk histogram (enhanced with percentile lines)
     scores_before = reid_before.get("risk_scores", [])
     scores_after = reid_after.get("risk_scores", [])
     if scores_before and scores_after:
-        fig = risk_histogram(scores_before, scores_after)
-        st.plotly_chart(fig, use_container_width=True, key=f"risk_histogram{key_suffix}")
+        risk_histogram_enhanced(
+            scores_before, scores_after,
+            reid_before=reid_before, reid_after=reid_after,
+            key=f"risk_histogram{key_suffix}",
+        )
+
+    # Retry trajectory (Smart Combo mode)
+    _attempts = (result.metadata or {}).get("attempts", [])
+    if len(_attempts) >= 2:
+        with st.expander("Retry Engine Trajectory", expanded=False):
+            _reid_tgt = st.session_state.get("risk_target", 0.10)
+            retry_trajectory_plot(
+                _attempts, reid_target=_reid_tgt, utility_floor=0.70,
+                key=f"retry_traj{key_suffix}",
+            )
+
+    # QI distribution comparison
+    if result.protected_data is not None and orig_data is not None:
+        with st.expander("QI Distribution Comparison", expanded=False):
+            _data_typed = st.session_state.get("data_typed")
+            _preproc = st.session_state.get("preprocessed_data")
+            comp_options = ["Original vs Protected"]
+            if _preproc is not None and _data_typed is not None:
+                comp_options.extend(["Original vs Preprocessed", "Preprocessed vs Protected"])
+            comp_mode = st.radio(
+                "Compare:", comp_options, horizontal=True,
+                key=f"dist_mode{key_suffix}",
+            )
+            if comp_mode == "Original vs Preprocessed" and _data_typed is not None and _preproc is not None:
+                left, right = _data_typed, _preproc
+            elif comp_mode == "Preprocessed vs Protected" and _preproc is not None:
+                left, right = _preproc, result.protected_data
+            else:
+                left, right = orig_data, result.protected_data
+            qi_distribution_plots(left, right, qis, title="", key_prefix=f"prot_dist{key_suffix}")
 
     # Sample comparison
     if result.protected_data is not None and orig_data is not None:
@@ -489,6 +526,7 @@ def _display_result(result, qis, sensitive, orig_data=None, log_entries=None,
             if _qi_util:
                 st.write("**Per-QI Utility Comparison:**")
                 st.dataframe(pd.DataFrame(_qi_util), use_container_width=True, hide_index=True)
+                qi_utility_delta_bar(_qi_util, key=f"qi_delta{key_suffix}")
             _mq = _diag.get("method_quality")
             if _mq:
                 st.write("**Method Quality:**")
@@ -664,6 +702,12 @@ if plan_df is not None and len(plan_df) > 0:
                 })
         if meta_rows:
             st.dataframe(pd.DataFrame(meta_rows), use_container_width=True, hide_index=True)
+
+        with st.expander("QI Distributions: Before vs After Preprocessing", expanded=False):
+            qi_distribution_plots(
+                data_typed, preprocessed, qis,
+                title="", key_prefix="preproc_dist",
+            )
 
     if skip_clicked:
         st.session_state["preprocessed_data"] = None
@@ -878,6 +922,9 @@ if plan_df is not None and len(plan_df) > 0:
 
             if comp.best_method:
                 st.success(f"Best scenario: **{comp.best_method}**")
+
+            # Radar chart comparison
+            scenario_radar_chart(scenarios, comp.results, key="scenario_radar")
 
             # Side-by-side metric cards
             card_cols = st.columns(len(comp.results))
