@@ -221,6 +221,11 @@ def build_data_features(
     else:
         feasibility, max_k = 'infeasible', 0
 
+    # Identify highest-cardinality QI to remove when kANON is infeasible
+    recommended_qi_to_remove = None
+    if feasibility == 'infeasible' and qi_cardinalities:
+        recommended_qi_to_remove = max(qi_cardinalities, key=qi_cardinalities.get)
+
     # Outlier detection (IQR method on numeric cols)
     has_outliers = False
     skewed_cols = []
@@ -286,7 +291,7 @@ def build_data_features(
     reid_50 = reid.get('reid_50', 0)
     reid_95 = reid.get('reid_95', 0)
     reid_99 = reid.get('reid_99', 0)
-    mean_risk = (reid_50 + reid_95) / 2
+    mean_risk = reid.get('mean_risk', reid_50)
 
     if reid_50 >= 0.20 and (reid_99 - reid_50) < 0.10:
         risk_pattern = 'uniform_high'
@@ -344,7 +349,7 @@ def build_data_features(
         'expected_eq_size': expected_eq,
         'k_anonymity_feasibility': feasibility,
         'max_achievable_k': max_k,
-        'recommended_qi_to_remove': None,
+        'recommended_qi_to_remove': recommended_qi_to_remove,
         'max_qi_uniqueness': max_qi_uniqueness,
         'integer_coded_qis': integer_coded_qis,
         'qi_type_counts': qi_type_counts,
