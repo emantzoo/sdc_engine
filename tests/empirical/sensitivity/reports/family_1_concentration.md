@@ -125,7 +125,8 @@ The question is which *tier* of rules fires:
 
 - **greek_mid (41742 rows):** var_priority empty, RC rules skipped,
   CAT1 fires (cat_ratio=1.00, reid_95=0.33). CAT1 selects PRAM as
-  primary, which fails (reid stays 1.0), then falls back to kANON.
+  primary, **which makes reid worse** — see Finding 3a below. The retry
+  engine falls back to kANON, which meets target.
 
 **Root cause of RC rule absence on large datasets:** `_compute_var_priority()`
 has a hard threshold at `max_n_records=10,000` (config.py line 1081).
@@ -135,10 +136,47 @@ fire instead — the engine is not falling through to a default path.
 
 **Implication:** RC rules were unreachable on 2 of 3 real datasets
 tested, both exceeding 10K rows. MED and CAT rules handled these
-datasets successfully, achieving reid targets with high utility. The
-Pareto tradeoff between RC and QR paths observed in synthetic data
-(Finding 2) is irrelevant in production — RC rules don't compete with
-other tiers because they're gated out before evaluation.
+datasets with the help of fallback logic. The Pareto tradeoff between
+RC and QR paths observed in synthetic data (Finding 2) is irrelevant
+in production — RC rules don't compete with other tiers because they're
+gated out before evaluation.
+
+### Finding 3a: CAT1 routes greek_mid to PRAM, which increases risk
+
+**Verified by direct PRAM application on greek_mid (41742 rows, 4 QIs,
+cat_ratio=1.00):**
+
+PRAM changed 22,951 cells across all 4 QIs (10-17% per column). But
+it fragmented the equivalence class structure instead of consolidating it:
+
+| Metric | Before PRAM | After PRAM |
+|--------|------------|------------|
+| Equivalence classes | 2,611 | 6,727 (+2.6x) |
+| Unique records (size-1) | 736 | 3,643 (+5x) |
+| reid_50 | 0.010 | 0.033 |
+| reid_95 | 0.333 | **1.000** |
+
+PRAM perturbs categorical values by reassigning them probabilistically.
+On microdata measured by reid_95 (record-level uniqueness = 1/eq_class_size),
+this scatters records OUT of existing equivalence classes into new,
+previously-empty QI combinations, making records MORE unique, not less.
+
+This is not a parameter or configuration issue — it is a method-data
+mismatch. PRAM reduces disclosure risk in frequency tables (where
+individual values become unreliable) but increases record-level
+re-identification risk in microdata (where it fragments the grouping
+structure). CAT1 routes high-cat-ratio microdata to PRAM, which is
+the wrong method for this data shape when the risk metric is reid_95.
+
+The retry engine rescued the outcome by detecting PRAM's failure
+(reid 1.0 > target 0.05, recognized as "need structural method") and
+falling back to kANON (reid=0.037). Without the retry engine, this
+dataset would have shipped with reid=1.0 — worse than unprotected.
+
+**This observation motivates Family 2's investigation of CAT1 method
+selection.** The question is not just whether the 0.70 cat_ratio threshold
+is calibrated correctly, but whether CAT1 should route to PRAM at all
+when the risk metric is reid_95.
 
 ### Finding 4: Mathematical floor on reid reduction
 
@@ -203,6 +241,12 @@ warranted** because:
 - **On testdata (4580 rows), RC1 fires organically and works as
   designed** — selects LOCSUPR, escalates to k=20, meets target with
   reid=0.044 and util=1.000.
+- **CAT1 routes greek_mid to PRAM, which increases reid from 0.33 to
+  1.0** (Finding 3a). PRAM fragments the equivalence class structure
+  on microdata — unique records grew from 736 to 3,643. The retry
+  engine rescued the outcome via kANON fallback. This is a method-data
+  mismatch: PRAM is wrong for high-cat-ratio microdata when the risk
+  metric is reid_95. This motivates Family 2.
 - **On synthetic data where we force-inject var_priority, RC rules and
   QR fallthrough produce Pareto-incomparable tradeoffs** (reid vs utility),
   not Pareto-superior ones. But this synthetic finding doesn't generalize
