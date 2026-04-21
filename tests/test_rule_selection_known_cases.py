@@ -184,6 +184,10 @@ class TestRiskConcentrationRules:
         from sdc_engine.sdc.selection.features import classify_risk_concentration
         features['risk_concentration'] = classify_risk_concentration(
             features['var_priority'])
+        # Mark feasible — this test targets RC1's dominated-pattern logic,
+        # not the infeasibility gate (tested separately in
+        # test_rc1_defers_when_infeasible).
+        features['k_anonymity_feasibility'] = 'feasible'
 
         result = risk_concentration_rules(features)
         assert result.get('applies'), \
@@ -199,6 +203,42 @@ class TestRiskConcentrationRules:
         result = risk_concentration_rules(features)
         assert not result.get('applies'), \
             "RC rules should not fire without var_priority"
+
+    def test_rc1_defers_when_infeasible(self):
+        """RC1 must NOT fire on infeasible data — QR0 should handle it.
+
+        When k_anonymity_feasibility == 'infeasible', RC1's LOCSUPR k=5
+        produces 20%+ suppression on raw high-cardinality data. QR0's
+        GENERALIZE_FIRST addresses the root cause (~1% suppression).
+        Regression discovered in Spec 19 Phase 1.4.
+        """
+        df, qis, _ = build_dominated_risk_dataset()
+        features = _build_test_features(df, qis)
+
+        # Inject var_priority with dominated pattern (would normally fire RC1)
+        features['var_priority'] = {
+            'job': ('HIGH', 65), 'sex': ('LOW', 15),
+            'race': ('LOW', 12), 'region': ('LOW', 8),
+        }
+        from sdc_engine.sdc.selection.features import classify_risk_concentration
+        features['risk_concentration'] = classify_risk_concentration(
+            features['var_priority'])
+
+        # Mark data as infeasible
+        features['k_anonymity_feasibility'] = 'infeasible'
+
+        # RC1 directly should defer
+        result = risk_concentration_rules(features)
+        assert not result.get('applies'), \
+            "RC1 should NOT fire when k_anonymity_feasibility == 'infeasible'"
+
+        # Full chain: QR0 should fire instead with GENERALIZE_FIRST
+        suite = select_method_suite(features, access_tier='standard',
+                                    verbose=False)
+        assert 'QR0' in suite['rule_applied'], \
+            f"Expected QR0 on infeasible data, got {suite['rule_applied']}"
+        assert suite['primary'] == 'GENERALIZE_FIRST', \
+            f"Expected GENERALIZE_FIRST, got {suite['primary']}"
 
 
 # ════════════════════════════════════════════════════════════════════════

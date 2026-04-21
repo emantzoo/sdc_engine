@@ -398,6 +398,10 @@ def build_small_dominated_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]
     n_qis <= max_n_qis, and one QI's cardinality is 10x+ the others
     so it dominates backward-elimination risk.
 
+    QI space must be feasible (qi_card_product << n) so RC1 fires
+    instead of deferring to QR0.  20 jobs × 2 sex × 3 region = 120
+    combos for 600 rows → feasible.
+
     Verified: var_priority populated, risk_concentration
     pattern='dominated', top_qi='job', top_pct > 40%.
     """
@@ -406,7 +410,7 @@ def build_small_dominated_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]
     df = pd.DataFrame({
         'sex': rng.choice(['M', 'F'], n),
         'region': rng.choice(['N', 'S', 'E'], n),
-        'job': rng.choice([f'j_{i}' for i in range(60)], n),  # dominant
+        'job': rng.choice([f'j_{i}' for i in range(20)], n),  # dominant
     })
     return df, ['sex', 'region', 'job'], []
 

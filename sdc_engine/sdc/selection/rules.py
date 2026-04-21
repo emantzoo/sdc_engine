@@ -361,6 +361,15 @@ def risk_concentration_rules(features: Dict) -> Dict:
     if reid_95 <= 0.15:
         return {'applies': False}
 
+    # Infeasibility gate: when the QI space is mathematically infeasible
+    # (expected_eq_size <= 4), RC1's LOCSUPR k=5 produces 20%+ suppression
+    # on raw high-cardinality data.  Defer to QR0 (GENERALIZE_FIRST) which
+    # addresses the root cause first.  Regression discovered in Spec 19
+    # Phase 1.4 — RC1 had been pre-empting QR0 since Spec 18 landed
+    # _compute_var_priority.
+    if features.get('k_anonymity_feasibility') == 'infeasible':
+        return {'applies': False}
+
     risk_conc = features.get('risk_concentration', {})
     pattern = risk_conc.get('pattern', 'unknown')
     if pattern == 'unknown':
