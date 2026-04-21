@@ -406,3 +406,68 @@ actually unwired. The fix for these rules is to wire the missing features into
 4. **live-unverified ≠ live.** 24 rules are verdicted live-unverified. Some
    may be redundant (fire but don't change the outcome vs the next-best rule)
    or niche (fire rarely). Phase 2 would resolve this.
+
+---
+
+## Spec 18 Audit Correction: RC1 Infeasibility Regression
+
+**Added:** 2026-04-21, discovered during Spec 19 Phase 1.4 investigation.
+
+### Issue
+
+RC1 (`RC1_Risk_Dominated`) fires on infeasible datasets (where
+`k_anonymity_feasibility == 'infeasible'` or `'hard'`) and pre-empts QR0
+(`GENERALIZE_FIRST`). This produces significantly worse protection outcomes:
+20%+ suppression on raw high-cardinality data instead of 1-2% suppression
+after generalization.
+
+### Root cause
+
+Spec 18 added `_compute_var_priority` to `build_data_features()`, which
+populates `var_priority` for datasets with N <= 10,000. RC1's gate requires
+`var_priority` to be non-empty. Before Spec 18, RC1 could not fire because
+`var_priority` was never populated.
+
+RC1's gate does not check `k_anonymity_feasibility`. When a dataset is both
+risk-concentrated (RC1's `dominated` pattern — which always matches due to
+the contribution metric's 50% floor) and infeasible (QI cardinality product
+exceeds N), RC1 fires at priority 12.5, pre-empting QR0 at priority 13.
+
+### Evidence
+
+Side-by-side protection comparison on 2 datasets:
+
+| Dataset | Without RC1 (QR0 path) | With RC1 | Delta |
+|---------|----------------------|----------|-------|
+| census_1K (3 QIs, 1K rows) | GEN_FIRST → 1.3% supp, k=5 | LOCSUPR → 20% supp, k=5 | +18.7% supp |
+| employee_1K (3 QIs, 1K rows) | GEN_FIRST → 1.4% supp, k=5 | LOCSUPR → 20% supp, k=1 | +18.6% supp, k failure |
+
+Audit trace confirms both `select_method_suite` (production) and
+`select_method_by_features` (legacy) fire RC1 before QR0 can match.
+
+### Scope
+
+- **Present since:** Spec 18 commit that added `_compute_var_priority` to
+  `build_data_features()`
+- **Affects:** All production paths (`select_method_suite` and
+  `select_method_by_features`) when `var_priority` is populated
+- **NOT caused by:** Spec 19 Phase 1.4 (which only extended the regression
+  to `recommend_method()`)
+
+### Recommended fix
+
+Add `feasibility != 'infeasible'` to RC1's gate conditions. When the dataset
+is infeasible, let QR0 handle it with GENERALIZE_FIRST, which addresses the
+root cause (high QI cardinality) before applying suppression.
+
+### RC1 verdict revision
+
+| Rule | Previous verdict | Revised verdict | Rationale |
+|------|-----------------|-----------------|-----------|
+| RC1 | live-unverified | **live-unverified (regression on infeasible data)** | Fires correctly on feasible data. Regression only affects infeasible-regime datasets |
+
+### Cross-reference
+
+- Full investigation: `spec_19_phase_1_4_behavioral_change.md`
+- Scripts: `scripts/spec_19_phase_1_4_comparison.py`,
+  `scripts/spec_19_phase_1_4_suite_check.py`

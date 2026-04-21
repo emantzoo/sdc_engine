@@ -241,14 +241,11 @@ class TestAuditFlagOn:
             f"Expected sub_rules in RC entry: {rc_entry}"
         )
         sub_rules = rc_entry['sub_rules']
-        assert len(sub_rules) == 4, f"Expected 4 RC sub-rules, got {len(sub_rules)}"
+        assert len(sub_rules) == 1, f"Expected 1 RC sub-rule (RC1 only), got {len(sub_rules)}"
 
-        # RC1 should apply (dominated), RC2-RC4 should not
+        # RC1 should apply (dominated)
         names = {s['rule']: s['applies'] for s in sub_rules}
         assert names['RC1_Risk_Dominated'] is True
-        assert names['RC2_Risk_Concentrated'] is False
-        assert names['RC3_Risk_Spread_High'] is False
-        assert names['RC4_Single_Bottleneck'] is False
 
         # Each sub-rule should have a gate description
         for s in sub_rules:

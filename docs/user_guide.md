@@ -518,7 +518,7 @@ The rules engine evaluates rules in priority order — **first match wins**. At 
 1. **Pipelines** checked first (dynamic builder or legacy CAT2†/P4/P5)
 2. **Small dataset guard** (HR6: <200 rows → LOCSUPR k=3)
 3. **Structural rules** (SR3: near-unique QI with few QIs)
-4. **Risk concentration rules** (RC1–RC4) — when per-QI risk data is available and ReID95 >15%
+4. **Risk concentration rule** (RC1) — when per-QI risk data is available and ReID95 >15%
 5. **Categorical / temporal / diversity rules** (CAT1†, LDIV1, DATE1)
 
 > † CAT1, CAT2, and DYN_CAT are **metric-gated**: they only fire when the active metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness).
@@ -1129,7 +1129,7 @@ When `var_priority` or `reid_target` is not provided, GENERALIZE processes all Q
 
 ### 11.10 Risk-Informed Method Selection
 
-When per-QI risk data (`var_priority`) is available from backward elimination AND ReID95 exceeds 15%, the method selection engine uses **risk concentration rules** (RC1–RC4) before the generic ReID-based rules. These classify how risk is distributed across QIs (dominated, concentrated, spread-high, single bottleneck) and select a targeted method accordingly. When risk concentration rules fire, they include a `preprocessing_hint` identifying the dominant QI, which is logged in the protection engine output.
+When per-QI risk data (`var_priority`) is available from backward elimination AND ReID95 exceeds 15%, the method selection engine uses the **risk concentration rule** (RC1) before the generic ReID-based rules. RC1 fires when a single QI dominates risk (≥40% contribution) and selects targeted LOCSUPR. When RC1 fires, it includes a `preprocessing_hint` identifying the dominant QI, which is logged in the protection engine output.
 
 **Automatic var_priority population (Spec 07, 2026-04):** Prior to this, `var_priority` was populated only via the Configure tab's backward elimination view. It is now computed automatically by the protection engine in `build_data_features()` for datasets up to 10,000 rows with ≤8 QIs. This means RC rules are reachable without a manual backward-elimination step. Performance guard: computation is skipped for larger datasets (configurable via `VAR_PRIORITY_COMPUTATION` in `config.py` -- see `max_n_records`, `max_n_qis`, `timeout_seconds`).
 
@@ -1269,7 +1269,7 @@ Then constrained by complexity and risk:
 
 ##### Method Selection (Preprocessing Quick-Test)
 
-This is a **simplified** method picker used for the preprocessing tier loop's quick protection test — it checks whether the target ReID is achievable after each preprocessing tier. It is **not** the final method selection. The full rules engine (`select_method.py` — RC1-RC3, CAT1-CAT2, QR0-QR4, etc.) is used for the actual Protection phase and considers risk patterns, data type composition, structural risk, and treatment levels. The two are complementary: the preprocessing retry varies preprocessing intensity while keeping the method constant; the rules engine picks the optimal method after preprocessing is complete.
+This is a **simplified** method picker used for the preprocessing tier loop's quick protection test — it checks whether the target ReID is achievable after each preprocessing tier. It is **not** the final method selection. The full rules engine (`select_method.py` — RC1, CAT1-CAT2, QR0-QR4, etc.) is used for the actual Protection phase and considers risk patterns, data type composition, structural risk, and treatment levels. The two are complementary: the preprocessing retry varies preprocessing intensity while keeping the method constant; the rules engine picks the optimal method after preprocessing is complete.
 
 | Condition | Method | Parameters | Rationale |
 |-----------|--------|------------|-----------|
@@ -2278,8 +2278,6 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 
 | Rule | Condition | k | Strategy |
 |------|-----------|---|----------|
-| RC2 | Top 2 QIs ≥60% risk, ReID95 >15% | 5† | hybrid |
-| RC3 | 3+ HIGH-risk QIs, ReID95 >15% | 7 or 10† | generalization |
 | QR2 heavy | ReID95 >40%, heavy tail, est. suppression at k=7 ≤25% | 7† | hybrid |
 | QR3 | Uniform high (ReID50 >20%) | 10† | generalization |
 | QR4 high | Widespread, ReID95 >50% | 10† | generalization |
@@ -2294,8 +2292,6 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 | EMERGENCY | Nothing matched at all | 5 | — |
 
 †k values marked with † are passed through `_clamp_k_by_suppression()`, which may reduce k based on estimated suppression at that level. This prevents selecting a k that would cause excessive record loss.
-
-**RC4 (pipeline):** 1 HIGH QI + 3+ LOW QIs, ReID95 >15% → GENERALIZE (bottleneck QI only, `max_categories=5`) → kANON (`k=3, strategy='hybrid'`). Listed separately because RC4 produces a two-step pipeline, not a single-method selection.
 
 **QR0 — K-Anonymity Infeasible:** When the QI combination space far exceeds the number of records (expected equivalence class size < 3), k-anonymity is structurally infeasible. QR0 triggers `GENERALIZE_FIRST` — aggressive generalization (`max_categories=5`) applied as a preprocessing step before re-running method selection on the reduced data. If still infeasible after generalization, falls back to LOCSUPR k=3. Risk fallback: PRAM p=0.25. Also recommends specific QIs for removal based on cardinality.
 
@@ -2314,7 +2310,7 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 | HR1 | Extreme uniqueness >20%, no ReID available | 5 |
 | HR6 | Dataset <200 rows + ≥2 QIs (structural constraint, max 1 suppression/record) | 3 |
 
-**As utility fallback** (weaker alternative when primary kANON hurts utility too much): MED1 (k=3), RC2 concentrated (k=5).
+**As utility fallback** (weaker alternative when primary kANON hurts utility too much): MED1 (k=3).
 
 #### 3.3 PRAM — When Selected as Primary
 
@@ -2346,8 +2342,6 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 **CAT1 — Categorical-aware selection at moderate risk:** When ≥70% of variables are categorical and risk is moderate (ReID95 15–40%), PRAM is selected instead of kANON. PRAM preserves all records while kANON would typically suppress 15–25%. The rule checks that no QI has a near-constant category (≥80% frequency), since PRAM is ineffective on concentrated distributions. Risk dependency: CAT1 requires `has_reid=True` — if risk computation was skipped, CAT1 does not fire and the dataset falls through to HR or default rules. Users who skip risk computation with categorical-dominant data should expect kANON or PRAM via a less-targeted route.
 
 **SR3 — Near-unique QI with few QIs:** When only 1–2 QIs exist and one has >70% uniqueness, kANON would collapse the entire column. LOCSUPR k=3 with targeted importance weighting is more surgical. Fires without var_priority, catching cases RC1 misses when backward elimination hasn't run.
-
-**RC4 — Single bottleneck QI:** When exactly 1 HIGH-risk QI coexists with 3+ LOW-risk QIs, targeted generalization of only the bottleneck QI followed by light kANON avoids unnecessary modification of the low-risk QIs.
 
 **LDIV1 — L-diversity gap:** When a sensitive column has ≤5 distinct values, most k-anonymous equivalence classes will be homogeneous (l≈1), offering no protection against attribute disclosure. LDIV1 recommends light PRAM on the sensitive column itself (p=0.15). **Co-fire merge:** When DATE1 conditions are also met (≥50% temporal QIs), LDIV1 and DATE1 are merged into a single `LDIV1_DATE1_Merged` rule — PRAM is applied to the union of sensitive columns and date QIs with the higher p_change (0.20–0.25), avoiding the first-match-wins problem where LDIV1 would block DATE1.
 

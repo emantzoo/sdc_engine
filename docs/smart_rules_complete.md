@@ -431,7 +431,7 @@ flowchart TD
         direction TB
         R_HR6["HR6: <200 rows → LOCSUPR k=3"]
         R_SR["SR3: ≤2 QIs + >70% unique + ReID>20% → LOCSUPR k=3"]
-        R_RC["RC1-RC4: Risk concentration rules"]
+        R_RC["RC1: Risk concentration rule"]
         R_CAT["CAT1-CAT2: Categorical-aware"]
         R_LDIV["LDIV1: l-diversity gap"]
         R_DATE["DATE1: Temporal-dominant"]
@@ -478,16 +478,15 @@ SR3 fires WITHOUT var_priority — catches near-unique single/dual QI cases that
 
 #### Risk Concentration Rules (RC) — require var_priority + ReID > 15%
 
-Gate: `reid_95 > 0.15` (lowered from 0.20 to allow RC4 which fires at 15%). RC1–RC3 have their own higher conditions within the gate.
+Gate: `reid_95 > 0.15` AND `var_priority` exists.
 
 | Rule | Pattern | Method | Params |
 |---|---|---|---|
 | RC1 | Top QI ≥ 40% risk (dominated) | LOCSUPR | k=5 |
-| RC2 | Top 2 QIs ≥ 60% (concentrated) | kANON | k=5, hybrid |
-| RC3 | 3+ HIGH QIs (spread high) | kANON | k=7–10, generalisation |
-| RC4 | 1 HIGH + 3+ others (bottleneck) | GENERALIZE bottleneck → kANON k=3 |
 
-**Activation status (as of 2026-04):** RC1 fires organically on datasets ≤10k rows and ≤8 QIs (performance guard from `config.py:VAR_PRIORITY_COMPUTATION`). RC2, RC3, and RC4 are perpetually preempted by RC1 under the current backward elimination contribution metric — see `docs/investigations/spec_16_readiness_rc_family_preemption.md` for algebra and empirical verification. RC4 was also config-blocked (GENERALIZE missing from `METRIC_ALLOWED_METHODS`) until Fix 0 (2026-04-20); see `tests/empirical/fixtures/README.md` Change History. HR1-HR5 remain dormant pending `uniqueness_rate` population in the feature pipeline — they are unit-tested via feature injection (see `tests/test_rule_selection_known_cases.py::TestUniquenessRiskRules`).
+RC2, RC3, and RC4 were deleted in Spec 19 Phase 2 (preempted-always by RC1). The `_compute_var_priority` contribution metric produces non-normalized percentages where every QI shows ≥50% contribution, making `top_pct >= 40%` structurally unavoidable. See `docs/investigations/spec_16_readiness_rc_family_preemption.md`.
+
+**Activation status (as of 2026-04):** RC1 fires organically on datasets ≤10k rows and ≤8 QIs (performance guard from `config.py:VAR_PRIORITY_COMPUTATION`). HR1-HR5 remain dormant pending `uniqueness_rate` population in the feature pipeline — they are unit-tested via feature injection (see `tests/test_rule_selection_known_cases.py::TestUniquenessRiskRules`).
 
 #### Context-Aware Rules (Access Tier Gated)
 
@@ -767,7 +766,7 @@ Checks if kANON at a lower k also meets the target with better utility. Runs fir
 
 **Accept condition:** stepped-down meets same targets AND utility gain > 2%
 
-**What it neutralises:** QR3 picks k=10 when target is k=5 → step-down tries k=7 → less suppression. RC3 picks k=10, target k=3 → tries k=7.
+**What it neutralises:** QR3 picks k=10 when target is k=5 → step-down tries k=7 → less suppression.
 
 **Execution order:** Step-down runs first, then the perturbative challenge runs on whatever won. If step-down reduced k=10→k=7, PRAM is now compared against k=7 (not k=10), giving a fairer comparison.
 

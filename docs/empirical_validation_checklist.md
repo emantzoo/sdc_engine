@@ -27,8 +27,8 @@ All thresholds were tuned against Greek property/demographic datasets during dev
 | Threshold | Value | Routes to | Rationale |
 |---|---|---|---|
 | Dominated | top QI ≥ 40% | RC1 → LOCSUPR k=5 | One column drives nearly half the risk — targeted suppression is more surgical |
-| Concentrated | top 2 QIs ≥ 60% | RC2 → kANON k=5 hybrid | Two columns dominate — risk-weighted preprocessing handles them |
-| Spread high | 3+ HIGH QIs | RC3 → kANON k=7-10 | Wide spread — aggressive generalisation needed |
+
+> **Note (Spec 19 Phase 2):** RC2 (Concentrated) and RC3 (Spread High) were deleted — structurally unreachable under the current backward elimination contribution metric (minimum contribution per QI is ~50%, so the `dominated` pattern always matches first). Only RC1 remains.
 
 **What to test:** Run datasets where the top QI contributes 30%, 35%, 40%, 45%. Compare LOCSUPR (RC1 path) vs kANON (QR path) outcomes at each level. Find the crossover point where LOCSUPR starts outperforming kANON. If it's consistently at 35% rather than 40%, adjust.
 
@@ -84,8 +84,8 @@ All thresholds were tuned against Greek property/demographic datasets during dev
 
 | Threshold | Value | Effect |
 |---|---|---|
-| RC gate | reid_95 > 0.15 | RC1-RC4 can fire |
-| Original | reid_95 > 0.20 | Lowered to 0.15 to allow RC4 |
+| RC gate | reid_95 > 0.15 | RC1 can fire |
+| Original | reid_95 > 0.20 | Lowered to 0.15 (originally for RC4, now only RC1 remains) |
 
 **Concern:** RC1 (LOCSUPR k=5) can now fire at 16% risk if one QI contributes ≥40%. Is targeted suppression warranted at relatively low risk just because risk is concentrated?
 
@@ -93,9 +93,9 @@ All thresholds were tuned against Greek property/demographic datasets during dev
 
 **Risk if wrong:** Low. LOCSUPR k=5 at 16% risk is not harmful — it's just potentially unnecessary when kANON k=5 would also work. Both achieve similar protection; the question is which has better utility for the specific data shape.
 
-**Current confidence:** Medium-high. The lowering was specifically for RC4 (bottleneck → GENERALIZE + kANON k=3), which makes sense at 15%. RC1-RC3 firing at 15% is a side effect, not the intent.
+**Current confidence:** Medium-high. The gate at 0.15 only affects RC1 in practice.
 
-> **Post-investigation note (2026-04-20):** RC4 is perpetually preempted by RC1 under the current backward elimination contribution metric — the bottleneck pattern (15-39% top contribution) never arises because minimum contribution for any k≥2 QI is 50%. The gate lowering to 0.15 therefore only benefits RC1 in practice. See `docs/investigations/spec_16_readiness_rc_family_preemption.md`.
+> **Post-investigation note (Spec 19 Phase 2):** RC2/RC3/RC4 deleted — structurally unreachable under the current backward elimination contribution metric (minimum contribution ~50%, so `dominated` always matches first). The gate lowering to 0.15 only benefits RC1. See `docs/investigations/spec_16_readiness_rc_family_preemption.md`.
 
 ---
 
@@ -715,7 +715,7 @@ One threshold differs between branches and should be reconciled:
 42 tests across 12 test classes verifying that each rule fires as designed on synthetic data. Each test constructs a minimal dataset targeting exactly one rule (or a specific guard condition). Covers QR1, QR2, QR4, MED1, RC1 (both injected and organic), CAT1, CAT2 via DYN_CAT_Pipeline, LOW1, LOW2, LOW3, SR3, HR6, HR1/HR3 (injected), PUB1/SEC1/REG1 (context-aware), rule priority ordering, dominance guard, and metric-filter edge cases.
 
 Key findings during builder construction (2026-04-20):
-- **RC rules (RC1-RC4) now fire organically** for small-to-medium datasets. Spec 07 added lazy `var_priority` computation to `build_data_features()` — for datasets up to 10,000 rows with ≤8 QIs, per-QI risk contribution is computed via leave-one-out reid_95 and the resulting `var_priority` populates `features['var_priority']` and `features['risk_concentration']`. For larger datasets, the performance guard skips the computation and RC rules remain dormant — the engine then falls through to QR/LOW rules.
+- **RC1 now fires organically** for small-to-medium datasets (RC2/RC3/RC4 deleted in Spec 19 Phase 2 — structurally unreachable). Spec 07 added lazy `var_priority` computation to `build_data_features()` — for datasets up to 10,000 rows with ≤8 QIs, per-QI risk contribution is computed via leave-one-out reid_95 and the resulting `var_priority` populates `features['var_priority']` and `features['risk_concentration']`. For larger datasets, the performance guard skips the computation and RC1 remains dormant — the engine then falls through to QR/LOW rules.
 - **HR1-HR5 remain dormant** — they depend on `uniqueness_rate` which is not populated in the feature pipeline. Tests for HR1-HR5 inject the feature manually via feature-injection (see `TestUniquenessRiskRules` in the known-case suite).
 - **DYN_CAT_Pipeline preempts CAT2.** The pipeline_rules check fires before rule_factories, so `CAT2_Mixed_Categorical_Majority` is unreachable when `DYN_CAT_Pipeline` has the same condition.
 - **QR0 (GENERALIZE_FIRST) ~~is skipped under reid95~~.** Pre-Fix 0 data — `GENERALIZE_FIRST` was missing from `METRIC_ALLOWED_METHODS` for all metrics, so QR0 was silently config-blocked. Fixed 2026-04-20: GENERALIZE and GENERALIZE_FIRST added to all 4 metric lists. See `tests/empirical/fixtures/README.md` Change History.

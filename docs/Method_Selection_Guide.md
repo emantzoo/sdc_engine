@@ -154,7 +154,7 @@ The system uses named rules across multiple categories. Rules are evaluated in p
 |----------|-------|-------|
 | **Feasibility** | QR0 | K-anonymity feasibility check |
 | **Structural risk** | SR3, HR1-HR6 | Near-unique records, small datasets |
-| **Risk concentration** | RC1-RC4 | Backward elimination risk patterns |
+| **Risk concentration** | RC1 | Backward elimination risk patterns |
 | **Categorical** | CAT1-CAT2 | Categorical-dominant data (l_diversity metric only) |
 | **ReID risk** | QR1-QR2 | Severe/heavy tail risk patterns |
 | **Low risk** | LOW1-LOW3 | Already-safe data |

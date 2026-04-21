@@ -173,32 +173,8 @@ def main():
           f"(need expected_eq<=4)")
     results.append(("G8", "floor_regime", ("", g8_pass)))
 
-    # G9: RC4_Single_Bottleneck (GENERALIZE → kANON pipeline)
-    # var_priority INJECTED — backward elimination cannot produce the RC4
-    # bottleneck pattern (1 HIGH 15-39%, 3+ LOW) on synthetic data under 10K rows.
-    # See docs/investigations/spec_16_readiness_rc_family_preemption.md
-    # Tests that Fix 0 (GENERALIZE added to METRIC_ALLOWED_METHODS) unblocked
-    # RC4's pipeline at the rule-selection layer.
-    r = verify("G9_RC4", "fixture_g9_rc4.csv",
-               ["postcode", "sex", "marital", "education"],
-               "RC4_Single_Bottleneck",
-               sensitive_columns=["disease"],
-               feature_overrides={
-                   'var_priority': {
-                       'postcode': ('HIGH', 25.0),
-                       'sex': ('LOW', 1.2),
-                       'marital': ('LOW', 2.1),
-                       'education': ('LOW', 1.8),
-                   },
-                   'risk_concentration': {
-                       'pattern': 'balanced',
-                       'top_qi': 'postcode',
-                       'top_pct': 25.0,
-                       'top2_pct': 27.1,
-                       'n_high_risk': 1,
-                   },
-               })
-    results.append(("G9", "RC4_Single_Bottleneck", r))
+    # G9 (RC4_Single_Bottleneck) removed — RC4 deleted in Spec 19 Phase 2.
+    # Fixture fixture_g9_rc4.csv retained for reference but no longer verified.
 
     # Summary
     print()

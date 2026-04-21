@@ -15,9 +15,10 @@ from typing import Dict, List, Optional
 def classify_risk_concentration(var_priority: Optional[Dict] = None) -> Dict:
     """Classify how backward-elimination risk is distributed across QIs.
 
-    The thresholds (40% dominated, 60% concentrated, 3+ HIGH) are initial
-    heuristics to validate empirically once composite utility enables
-    systematic comparison.
+    Only the 'dominated' pattern (top QI >= 40%) is consumed by production
+    rules (RC1).  RC2/RC3/RC4 were deleted in Spec 19 Phase 2 — their
+    patterns ('concentrated', 'spread_high', 'balanced') are no longer used
+    by any rule gate.
 
     Returns dict with pattern, top_qi, top_pct, top2_pct, n_high_risk.
     """
@@ -31,14 +32,7 @@ def classify_risk_concentration(var_priority: Optional[Dict] = None) -> Dict:
     n_high = sum(1 for _, (label, _) in sorted_qis
                  if 'HIGH' in label and 'MED' not in label)
 
-    if top_pct >= 40:
-        pattern = 'dominated'
-    elif top2_pct >= 60:
-        pattern = 'concentrated'
-    elif n_high >= 3:
-        pattern = 'spread_high'
-    else:
-        pattern = 'balanced'
+    pattern = 'dominated' if top_pct >= 40 else 'not_dominated'
 
     return {
         'pattern': pattern,

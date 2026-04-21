@@ -36,17 +36,12 @@ def _patch_rc1_dominated(value: float):
     def patched(var_priority=None):
         result = original(var_priority)
         top_pct = result.get("top_pct", 0)
-        top2_pct = result.get("top2_pct", 0)
-        n_high = result.get("n_high_risk", 0)
         # Re-classify with the variable cutoff (value is 0-1 fraction)
+        # Only 'dominated' vs 'not_dominated' — RC2/RC3/RC4 deleted.
         if top_pct >= value * 100:
             result["pattern"] = "dominated"
-        elif top2_pct >= 60:
-            result["pattern"] = "concentrated"
-        elif n_high >= 3:
-            result["pattern"] = "spread_high"
         else:
-            result["pattern"] = "balanced"
+            result["pattern"] = "not_dominated"
         return result
 
     with patch.object(feat_mod, "classify_risk_concentration", patched):

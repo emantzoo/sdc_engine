@@ -26,12 +26,10 @@ RULE PRIORITY (evaluated in order, first match wins):
     - SR3: n_qis ≤ 2 + max uniqueness > 70% + ReID95 > 20% → LOCSUPR k=3
     - Fires WITHOUT var_priority (catches cases RC1 misses)
 
-2.  Risk Concentration Rules (RC1-RC4) - Per-QI risk contribution
+2.  Risk Concentration Rules (RC1) - Per-QI risk contribution
     - Only fire when var_priority exists AND ReID_95 > 15%
     - RC1: dominated (top QI ≥40%) → LOCSUPR k=5
-    - RC2: concentrated (top 2 ≥60%) → kANON k=5 hybrid
-    - RC3: spread_high (3+ HIGH QIs) → kANON k=7-10 generalization
-    - RC4: single HIGH + 3+ LOW QIs → GENERALIZE(bottleneck) → kANON k=3
+    - RC2/RC3/RC4 deleted (preempted-always by RC1, Spec 19 Phase 2)
 
 2b. PUB1 - Public release structural preference (PUBLIC + reid_target=1%)
     - PUB1_high: reid_95 > 20% → kANON k=10 generalization
@@ -345,23 +343,22 @@ def small_dataset_rules(features: Dict) -> Dict:
 
 def risk_concentration_rules(features: Dict) -> Dict:
     """
-    Risk-concentration rules (RC1-RC3) using per-QI backward-elimination data.
+    Risk-concentration rule (RC1) using per-QI backward-elimination data.
 
-    Only fire when ``var_priority`` exists AND ``reid_95 > 0.20`` — i.e. risk
+    Only fires when ``var_priority`` exists AND ``reid_95 > 0.15`` — i.e. risk
     is elevated AND we have per-QI risk data to make a sharper decision than
     the generic ReID rules.
 
-    NOTE: The method/parameter mappings below are initial heuristics —
-    same treatment as risk-tier thresholds.  Validate empirically once
-    composite utility enables systematic A/B comparison.
+    RC2/RC3/RC4 were deleted in Spec 19 Phase 2 (preempted-always by RC1).
+    The _compute_var_priority contribution metric produces non-normalized
+    percentages (each QI's drop / baseline), so top_pct >= 40% always holds
+    and the 'dominated' pattern always matches first.
     """
     var_priority = features.get('var_priority', {})
     if not var_priority:
         return {'applies': False}
 
     reid_95 = features.get('reid_95', 0)
-    # Gate lowered from 0.20 to 0.15 to allow RC4 (single bottleneck) which
-    # fires at reid_95 > 0.15.  RC1-RC3 still require their own higher thresholds.
     if reid_95 <= 0.15:
         return {'applies': False}
 
@@ -373,32 +370,16 @@ def risk_concentration_rules(features: Dict) -> Dict:
     qis = features.get('quasi_identifiers', [])
     top_qi = risk_conc.get('top_qi')
     top_pct = risk_conc.get('top_pct', 0)
-    top2_pct = risk_conc.get('top2_pct', 0)
-    n_high = risk_conc.get('n_high_risk', 0)
-    n_other = len(qis) - n_high  # includes MODERATE and LOW
 
     _audit = features.get('_audit', False)
 
-    # Evaluate each sub-rule's gate condition independently
     rc1_match = (pattern == 'dominated')
-    rc2_match = (pattern == 'concentrated')
-    rc3_match = (pattern == 'spread_high')
-    rc4_match = (n_high == 1 and n_other >= 3 and reid_95 > 0.15
-                 and pattern == 'balanced')
 
-    # Build sub-rule trace (audit mode only)
     _sub_trace = None
     if _audit:
         _sub_trace = [
             {'rule': 'RC1_Risk_Dominated', 'applies': rc1_match,
              'gate': f'pattern==dominated (actual={pattern}, top_pct={top_pct:.1f}%)'},
-            {'rule': 'RC2_Risk_Concentrated', 'applies': rc2_match,
-             'gate': f'pattern==concentrated (actual={pattern}, top_pct={top_pct:.1f}%, top2_pct={top2_pct:.1f}%)'},
-            {'rule': 'RC3_Risk_Spread_High', 'applies': rc3_match,
-             'gate': f'pattern==spread_high (actual={pattern}, n_high={n_high})'},
-            {'rule': 'RC4_Single_Bottleneck', 'applies': rc4_match,
-             'gate': (f'pattern==balanced AND n_high==1 AND n_other>=3 '
-                      f'(actual: pattern={pattern}, n_high={n_high}, n_other={n_other})')},
         ]
 
     # RC1: Dominated — one QI accounts for ≥40% of risk.
@@ -426,102 +407,7 @@ def risk_concentration_rules(features: Dict) -> Dict:
             result['_sub_rule_trace'] = _sub_trace
         return result
 
-    # RC2: Concentrated — top 2 QIs account for ≥60% of risk.
-    # Hybrid k-anonymity lets risk-weighted preprocessing handle the heavy QIs.
-    if rc2_match:
-        k = _clamp_k_by_suppression(features, 5)
-        result = {
-            'applies': True,
-            'rule': 'RC2_Risk_Concentrated',
-            'method': 'kANON',
-            'parameters': {'quasi_identifiers': qis, 'k': k, 'strategy': 'hybrid'},
-            'reason': (
-                f"Risk concentrated in top 2 QIs ({top2_pct:.0f}%) — "
-                f"hybrid k-anonymity with risk-weighted preprocessing"
-            ),
-            'confidence': 'HIGH',
-            'priority': 'REQUIRED',
-            'preprocessing_hint': {'aggressive_qi': top_qi, 'pct': top_pct},
-            'reid_fallback': {
-                'method': 'kANON',
-                'parameters': {'quasi_identifiers': qis, 'k': 7, 'strategy': 'generalization'},
-            },
-            'utility_fallback': {
-                'method': 'LOCSUPR',
-                'parameters': {'quasi_identifiers': qis, 'k': 5},
-            },
-        }
-        if _sub_trace:
-            result['_sub_rule_trace'] = _sub_trace
-        return result
-
-    # RC3: Spread-high — 3+ QIs flagged HIGH risk.
-    # Risk is wide — need aggressive structural protection.
-    if rc3_match:
-        k = _clamp_k_by_suppression(features, 10 if reid_95 > 0.40 else 7)
-        result = {
-            'applies': True,
-            'rule': 'RC3_Risk_Spread_High',
-            'method': 'kANON',
-            'parameters': {'quasi_identifiers': qis, 'k': k, 'strategy': 'generalization'},
-            'reason': (
-                f"{n_high} QIs flagged HIGH risk — wide spread requires "
-                f"aggressive generalization (k={k})"
-            ),
-            'confidence': 'HIGH',
-            'priority': 'REQUIRED',
-            'reid_fallback': {
-                'method': 'kANON',
-                'parameters': {'quasi_identifiers': qis, 'k': k + 3, 'strategy': 'generalization'},
-            },
-            'utility_fallback': {
-                'method': 'kANON',
-                'parameters': {'quasi_identifiers': qis, 'k': max(5, k - 2), 'strategy': 'hybrid'},
-            },
-        }
-        if _sub_trace:
-            result['_sub_rule_trace'] = _sub_trace
-        return result
-
-    # RC4: Single HIGH QI bottleneck + many LOW QIs
-    # Targeted GENERALIZE on the bottleneck QI → light kANON on the rest.
-    # Distinct from RC1 which requires top QI ≥40% risk — RC4 uses HIGH label count.
-    if rc4_match:
-        high_qi_name = next(
-            (qi for qi, (label, _) in var_priority.items()
-             if 'HIGH' in label and 'MED' not in label),
-            top_qi,
-        )
-        result = {
-            'applies': True,
-            'rule': 'RC4_Single_Bottleneck',
-            'use_pipeline': True,
-            'pipeline': ['GENERALIZE', 'kANON'],
-            'parameters': {
-                'GENERALIZE': {
-                    'quasi_identifiers': [high_qi_name],
-                    'max_categories': 5,
-                    'strategy': 'all',
-                },
-                'kANON': {
-                    'quasi_identifiers': qis,
-                    'k': 3,
-                    'strategy': 'hybrid',
-                },
-            },
-            'reason': (
-                f"Single bottleneck QI '{high_qi_name}' ({top_pct:.0f}%) with "
-                f"{n_other} other QIs — targeted generalization avoids "
-                f"unnecessary modification of low-risk QIs"
-            ),
-            'confidence': 'HIGH',
-            'priority': 'REQUIRED',
-        }
-        if _sub_trace:
-            result['_sub_rule_trace'] = _sub_trace
-        return result
-
-    # Balanced pattern — no special action, let generic ReID rules handle it
+    # Non-dominated pattern — let generic ReID rules handle it
     result = {'applies': False}
     if _sub_trace:
         result['_sub_rule_trace'] = _sub_trace

@@ -274,9 +274,10 @@ def verify_builders(verbose: bool = True) -> Dict[str, bool]:
         print("-" * 85)
 
     # Expected patterns at boundary
-    # top_pct >= 40 → dominated, < 40 → balanced (since top2 won't hit 60)
+    # top_pct >= 40 → dominated, < 40 → not_dominated
+    # (RC2/RC3/RC4 deleted — only dominated vs not_dominated remains)
     expected_top_pct_pattern = {
-        30.0: 'balanced', 35.0: 'balanced',
+        30.0: 'not_dominated', 35.0: 'not_dominated',
         40.0: 'dominated', 45.0: 'dominated', 50.0: 'dominated',
     }
 
@@ -306,10 +307,11 @@ def verify_builders(verbose: bool = True) -> Dict[str, bool]:
                 if verbose:
                     print(f"  {label:<33} {target:>6.1f}%    ERROR: {e}")
 
-    # top2_pct >= 60 → concentrated (if top1 < 40), < 60 → balanced
+    # top2_pct patterns — with RC2/RC3/RC4 deleted, all non-dominated
+    # patterns map to 'not_dominated' regardless of top2_pct
     expected_top2_pattern = {
-        50.0: 'balanced', 55.0: 'balanced',
-        60.0: 'concentrated', 65.0: 'concentrated',
+        50.0: 'not_dominated', 55.0: 'not_dominated',
+        60.0: 'not_dominated', 65.0: 'not_dominated',
     }
 
     for target in TOP2_PCT_TARGETS:
