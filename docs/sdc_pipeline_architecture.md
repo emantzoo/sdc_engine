@@ -403,6 +403,49 @@ bins, correlates group means. Warning if mean subgroup preservation <60%.
 
 ---
 
+## Retry Architecture: Two Independent Loops
+
+The engine has two retry mechanisms that run **sequentially**, not competitively.
+They are dispatched by UI mode — a given protection run uses one or the other, never both.
+
+### Loop 1 — Preprocessing Retry (Smart Combo path)
+
+**Entry:** `apply_smart_workflow_with_adaptive_retry()` in `smart_defaults.py`.
+**Scope:** Phase 3 (Preprocess). Varies GENERALIZE intensity while keeping the protection
+method constant.
+
+Escalates through 4 tiers (light → moderate → aggressive → very_aggressive), each with
+increasing `max_categories` aggressiveness. Each tier starts from a fresh copy of the
+type-preprocessed data (no compounding). Stops when the risk target is met or the utility
+floor is hit. Bounded by `max_attempts` (default 4); no time guard.
+
+Method selection is done by `calculate_smart_defaults()` based on `n_qis`. Since Spec 20
+follow-up, this selection is gated by `METRIC_ALLOWED_METHODS` — methods blocked for the
+active metric are replaced by kANON.
+
+### Loop 2 — Method Retry (Auto path)
+
+**Entry:** `run_rules_engine_protection()` in `protection_engine.py`.
+**Scope:** Phase 4 (Protect). Varies the protection method while preprocessing is fixed.
+
+Three phases: (a) pipeline methods from `select_method_suite`, (b) primary method with
+parameter tuning (PARAMETER_TUNING_SCHEDULES), (c) fallback methods with parameter tuning.
+Smart start via `_pick_escalation_start()` skips early phases when structural risk is high.
+All methods filtered through `METRIC_ALLOWED_METHODS` at entry (line 1384). Time-bounded
+by `ESC_TIME_BUDGET` (30 seconds).
+
+### Why two loops
+
+The loops are complementary:
+- Loop 1 asks: "can we preprocess enough to make protection feasible?"
+- Loop 2 asks: "which protection method works best on this preprocessed data?"
+
+They don't compete because the UI dispatches to one or the other based on mode selection
+(Auto → Loop 2, Smart Combo → Loop 1). Both loops respect `METRIC_ALLOWED_METHODS`, though
+via different mechanisms (Loop 1 at method selection time, Loop 2 at method filtering time).
+
+---
+
 ## Implementation: Metric–Method Filter (Phase 1) ✓ Implemented
 
 Post-rule filtering in `select_method_suite()` ensures incompatible methods are never
