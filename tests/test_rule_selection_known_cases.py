@@ -57,17 +57,18 @@ from tests.fixtures.rule_test_builders import (
 # ════════════════════════════════════════════════════════════════════════
 
 def _build_test_features(df, qis):
-    """Build features for testing with two remaining overlay adjustments.
+    """Build features for testing with one remaining overlay adjustment.
 
     Divergence 1 (continuous/categorical scope) resolved: builders now
     produce datasets with genuinely continuous QIs (>20 unique numeric
     values) so build_data_features QI-only scope matches test intent.
 
-    Two remaining overlays (will be removed in Tasks 3b/3c):
+    Divergence 3 (uniqueness_rate) resolved: tests now accept production's
+    QI-combo uniqueness semantics.
+
+    One remaining overlay (will be removed in Task 3c):
     2. risk_pattern: production inline classifier vs metrics.reid classifier
-    3. uniqueness_rate: production QI-combo uniqueness vs analysis-derived
     """
-    from sdc_engine.sdc.sdc_utils import analyze_data
     from sdc_engine.sdc.metrics.reid import classify_risk_pattern
     features = build_data_features(df, qis)
     # Strip auto-computed var_priority so RC rules stay dormant by default.
@@ -84,9 +85,6 @@ def _build_test_features(df, qis):
         pattern = classify_risk_pattern(reid_metrics)
         features['risk_pattern'] = pattern
         features['risk_level'] = pattern
-    # 3. Overlay legacy uniqueness_rate (analysis-derived, typically 0)
-    analysis = analyze_data(df, quasi_identifiers=qis, verbose=False)
-    features['uniqueness_rate'] = analysis.get('uniqueness_rate', 0)
     return features
 
 
@@ -378,14 +376,28 @@ class TestUniquenessRiskRules:
         assert 'HR3' in result.get('rule', ''), \
             f"Expected HR3, got {result.get('rule', '?')}"
 
-    def test_hr_rules_dormant_without_uniqueness(self):
-        """Without injected uniqueness_rate, HR rules should NOT fire."""
+    def test_hr_rules_preempted_in_chain(self):
+        """HR rules never fire in full chain when has_reid=True.
+
+        Production always computes uniqueness_rate (non-zero), so HR
+        rules WOULD fire if reached.  But reid_risk_rules fires first
+        when has_reid=True, preempting HR at priority 15.
+        """
         df, qis, _ = build_extreme_uniqueness_dataset()
         features = _build_test_features(df, qis)
 
+        # Verify uniqueness_rate is non-zero under production semantics
+        assert features['uniqueness_rate'] > 0, \
+            "Production should compute non-zero uniqueness_rate"
+        # HR rules would fire if called directly
         result = uniqueness_risk_rules(features)
-        assert not result.get('applies'), \
-            f"HR rules should not fire without uniqueness; got {result.get('rule', '?')}"
+        assert result.get('applies'), \
+            "HR rules should fire when uniqueness_rate > 0.05"
+        # But in the full chain, higher-priority rules preempt HR
+        suite = select_method_suite(features, access_tier='standard',
+                                    verbose=False)
+        assert 'HR' not in suite['rule_applied'], \
+            f"HR rules should be preempted in full chain, got {suite['rule_applied']}"
 
 
 # ════════════════════════════════════════════════════════════════════════
