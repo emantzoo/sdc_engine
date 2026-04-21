@@ -25,9 +25,9 @@ Fixture CSV retained for reference.
 Fixture CSV retained for reference. See
 `docs/investigations/spec_16_readiness_rc_family_preemption.md`.
 
-\** G10 requires injected max_qi_uniqueness — `build_data_features()` does
-not compute this field. Added by Spec 18 Item 5 to prove SR3 fires on
-realistic 2-QI data with high uniqueness.
+\** G10 originally required injected max_qi_uniqueness. Since Spec 19,
+`build_data_features()` computes both `max_qi_uniqueness` and
+`geo_qis_by_granularity` natively. Injection removed in Spec 20 A3.
 
 **Result: 8/8 PASS** (G4 removed — P4b deleted, G9 removed — RC4 deleted, both in Spec 19 Phase 2)
 

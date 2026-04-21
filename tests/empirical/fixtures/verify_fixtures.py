@@ -15,34 +15,13 @@ from sdc_engine.sdc.selection.pipelines import select_method_suite
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
-# Geo hints used by features.py for GEO1 detection
-_GEO_HINTS = {'region', 'city', 'state', 'country', 'zip', 'postal',
-              'county', 'district', 'municipality', 'prefecture'}
-
-
-def _inject_geo_features(features, df, quasi_identifiers):
-    """Inject geo_qis_by_granularity (computed by features.py but not protection_engine)."""
-    geo_qis_by_granularity = {}
-    for qi in quasi_identifiers:
-        if qi not in df.columns:
-            continue
-        if any(h in qi.lower() for h in _GEO_HINTS):
-            card = df[qi].nunique()
-            geo_qis_by_granularity[qi] = 'fine' if card > 50 else 'coarse'
-    features['geo_qis_by_granularity'] = geo_qis_by_granularity
-
-
 def verify(name, csv_name, quasi_identifiers, expected_rule, *,
            risk_metric='reid95', sensitive_columns=None,
-           feature_overrides=None, inject_geo=False):
+           feature_overrides=None):
     """Run feature extraction + method selection, return (actual_rule, match)."""
     df = pd.read_csv(DATA_DIR / csv_name)
     features = build_data_features(df, quasi_identifiers)
     features['_risk_metric_type'] = risk_metric
-
-    # Inject geo features (build_data_features doesn't compute these)
-    if inject_geo:
-        _inject_geo_features(features, df, quasi_identifiers)
 
     # Inject sensitive column info if provided
     if sensitive_columns:
@@ -113,8 +92,7 @@ def main():
     # was silently rejected and QR4_Widespread fired instead. Fixed 2026-04-20.
     r = verify("G2_GEO1", "fixture_g2_geo1.csv",
                ["city", "region", "income"],
-               "GEO1_Multi_Level_Geographic",
-               inject_geo=True)
+               "GEO1_Multi_Level_Geographic")
     results.append(("G2", "GEO1_Multi_Level_Geographic", r))
 
     # G3: DYN pipeline (kANON + LOCSUPR)
@@ -148,14 +126,10 @@ def main():
     results.append(("G7", "LOW2_Continuous_Noise", r))
 
     # G10: SR3_Near_Unique_Few_QIs (2 QIs, one high-uniqueness, moderate reid)
-    # max_qi_uniqueness INJECTED — build_data_features doesn't compute it.
-    # Spec 18 Item 5: fixture proves SR3 fires on realistic 2-QI data.
+    # max_qi_uniqueness is now natively computed by build_data_features (Spec 19).
     r = verify("G10_SR3", "fixture_sr3_few_qis.csv",
                ["id_code", "sex"],
-               "SR3_Near_Unique_Few_QIs",
-               feature_overrides={
-                   'max_qi_uniqueness': 0.80,
-               })
+               "SR3_Near_Unique_Few_QIs")
     results.append(("G10", "SR3_Near_Unique_Few_QIs", r))
 
     # G8: Floor regime (just verify features, not a specific rule)
