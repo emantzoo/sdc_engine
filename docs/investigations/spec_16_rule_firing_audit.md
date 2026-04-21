@@ -1,7 +1,7 @@
 # Spec 16 — Rule Firing Audit Report
 
-**Date:** 2026-04-20
-**Status:** Complete (Phases 1 + 1b only; Phases 2-3 not run)
+**Date:** 2026-04-20 (updated 2026-04-22)
+**Status:** Complete (Phases 1 + 1b only; Phases 2-3 not run). Updated through Spec 20. Rule verdicts reflect post-deletion state.
 
 ---
 
@@ -147,10 +147,10 @@ whether it improves outcomes. Phase 2 would upgrade these to live/niche/redundan
 
 | Rule | Verdict | Rationale | Recommended follow-up |
 |---|---|---|---|
-| DP1 | **live-unverified** | Gate inside range. testdata, adult, greek all have outliers + continuous vars. But DP1 is priority 6 — likely preempted by higher-priority rules in practice | Phase 2 to measure actual fire rate. May be `preempted` |
-| DP2 | **live-unverified** | Gate inside range. G4 has 2 skewed cols, greek has 7. Same preemption caveat as DP1 | Phase 2 |
-| DP3 | **live-unverified** | Gate inside range via fixture injection. Requires sensitive columns | Phase 2 |
-| DP4 | **untriggered → tightened** | integer_coded_qis present on testdata (7) and free1 (5), but reid_95 ≥ 0.50 on both. Reid ceiling tightened from 0.30 to 0.20 (Spec 18 Item 4). Still untriggered on harness (no low-reid integer-coded fixture) | Accept as niche rule for low-risk data |
+| DP1 | **dead-by-position → deleted** | Gate inside range, but LOW3 (unconditional catch-all) always fires first. Confirmed dead by Spec 22 Tests 1 and 2. Deleted in Spec 20 A2 | Closed |
+| DP2 | **dead-by-position → deleted** | Gate inside range, but LOW3 (unconditional catch-all) always fires first. Confirmed dead by Spec 22 Tests 1 and 2. Deleted in Spec 20 A2 | Closed |
+| DP3 | **dead-by-position → deleted** | Unwired (`has_sensitive_attributes` hardcoded False) AND dead-by-position after LOW3. Deleted in Spec 20 A2 | Closed |
+| DP4 | **deleted (Spec 19 Phase 2)** | integer_coded_qis present on testdata (7) and free1 (5), but reid_95 ≥ 0.50 on both. Deleted alongside P4a/P4b in Spec 19 Phase 2 | Closed |
 
 ### Uniqueness risk rules (no-ReID fallback)
 
@@ -329,12 +329,12 @@ optimization — it saves maintenance effort but doesn't prevent silent bugs.
 
 Would have measured outcome delta for each firing rule. Without it, we can't
 distinguish niche (fires rarely but helps) from redundant (fires but doesn't
-help). This matters most for DP1-DP4 and LOW1-LOW3, which are low-priority
-rules that may duplicate higher-priority rules' selections.
+help). This matters most for LOW1-LOW3, which are low-priority
+rules that may duplicate higher-priority rules' selections. (DP1-DP4
+have been deleted — see Spec 20 A2.)
 
 **Risk of skipping:** Low. The rules most likely to be redundant (DP1-DP4)
-are already low-priority in the chain. Deleting them based on Phase 2 fire
-counts alone (if they never fire) would be safe.
+were confirmed dead-by-position and deleted in Spec 19/20.
 
 ---
 
@@ -355,12 +355,12 @@ rule cannot fire without explicit injection.
 | Rule | Original verdict | Revised verdict | Missing feature(s) | Evidence |
 |------|-----------------|-----------------|---------------------|----------|
 | GEO1 | live-unverified | **unwired** | `geo_qis_by_granularity` | Not in `build_data_features()` or `extract_data_features_with_reid()`. Only injected by fixture helper |
-| P4a | live-unverified | **unwired** | `has_sensitive_attributes`, `sensitive_column_diversity` | `has_sensitive_attributes` hardcoded `False` in `build_data_features()` line 281 |
-| P4b | live-unverified | **unwired** | `has_sensitive_attributes`, `sensitive_column_diversity` | Same as P4a |
-| DP3 | live-unverified | **unwired** | `has_sensitive_attributes` | Same hardcoded `False` |
+| P4a | live-unverified | **unwired → deleted (Spec 19)** | `has_sensitive_attributes`, `sensitive_column_diversity` | Deleted in Spec 19 Phase 2 |
+| P4b | live-unverified | **unwired → deleted (Spec 19)** | `has_sensitive_attributes`, `sensitive_column_diversity` | Deleted in Spec 19 Phase 2 |
+| DP3 | live-unverified | **unwired → deleted (Spec 20)** | `has_sensitive_attributes` | Dead-by-position + unwired. Deleted in Spec 20 A2 |
 | LDIV1 | live-unverified | **unwired** | `sensitive_column_diversity`, `min_l` | `sensitive_column_diversity` returns `None`; `min_l` only via test overrides |
 | SR3 | niche (verified) | **unwired (niche if wired)** | `max_qi_uniqueness` | Not in `build_data_features()`. G10 fixture fires with injection |
-| DP4 | untriggered → tightened | **unwired + tightened** | `integer_coded_qis` | Defaults to `[]` (falsy). Threshold tightening was correct but insufficient |
+| DP4 | untriggered → tightened | **unwired → deleted (Spec 19)** | `integer_coded_qis` | Deleted in Spec 19 Phase 2 alongside P4a/P4b |
 | DATE1 | untriggered → widened | **unwired + widened** | `qi_type_counts` | Defaults to `{}`. `n_date = 0` always. Threshold widening was correct but insufficient |
 
 ### Verdicts confirmed unchanged
@@ -377,12 +377,12 @@ rule cannot fire without explicit injection.
 
 | Verdict | Count | Rules |
 |---|---|---|
-| live-unverified | 19 | DYN, P5, REG1×2, PUB1×2, SEC1×2, RC1, CAT1, QR0-QR4, MED1, LOW1-LOW3, DP1, DP2, DEFAULT |
-| **unwired** | **8** | **GEO1, P4a, P4b, DP3, LDIV1, SR3, DP4, DATE1** |
+| live-unverified | 17 | DYN, P5, REG1×2, PUB1×2, SEC1×2, RC1, CAT1, QR0-QR4, MED1, LOW1-LOW3, DEFAULT |
+| **unwired** | **4** | **GEO1, LDIV1, SR3, DATE1** |
+| **deleted** | **7** | **DP1, DP2, DP3 (Spec 20 A2), DP4, P4a, P4b (Spec 19 Phase 2), DYN_CAT (Spec 19 Phase 2)** |
 | preempted-always | 3 | RC2, RC3, RC4 |
 | preempted | 1 | CAT2 |
 | **preempted (defensive)** | **5** | **HR1-HR5** (Spec 19 Phase 2.3 close-out) |
-| unreachable | 1 | DYN_CAT_Pipeline |
 | untriggered | 1 | HR6 |
 | **Total** | **38** | |
 
