@@ -62,6 +62,12 @@ def build_data_features(
     -------
     dict
         Features dict compatible with ``select_method_suite()``.
+
+    Notes
+    -----
+    ``cat_ratio`` is NOT stored in the features dict. All consumers
+    compute it as ``n_categorical / (n_categorical + n_continuous)``.
+    This is intentional — the ratio is derived from stored primitives.
     """
     from sdc_engine.sdc.metrics.risk_metric import (
         RiskMetricType, compute_risk, risk_to_reid_compat,
