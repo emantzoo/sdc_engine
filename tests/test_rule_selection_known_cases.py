@@ -56,27 +56,15 @@ from tests.fixtures.rule_test_builders import (
 # Helper
 # ════════════════════════════════════════════════════════════════════════
 
-def _build_test_features(df, qis):
-    """Build features for testing — thin wrapper around build_data_features.
+def get_suite(df, qis, access_tier='standard', feature_overrides=None):
+    """Run the full rule chain and return the suite dict.
 
-    All three historical overlays have been resolved:
-    1. continuous/categorical scope: builders use genuinely continuous QIs
-    2. risk_pattern: production now delegates to classify_risk_pattern()
-    3. uniqueness_rate: tests accept production's QI-combo semantics
-
-    Only remaining adjustment: strip var_priority so RC rules stay
-    dormant by default in tests that don't need them.
+    Strips var_priority/risk_concentration so RC rules stay dormant
+    by default — tests that need RC behaviour inject them via overrides.
     """
     features = build_data_features(df, qis)
-    # Strip auto-computed var_priority so RC rules stay dormant by default.
     features.pop('var_priority', None)
     features.pop('risk_concentration', None)
-    return features
-
-
-def get_suite(df, qis, access_tier='standard', feature_overrides=None):
-    """Run the full rule chain and return the suite dict."""
-    features = _build_test_features(df, qis)
     if feature_overrides:
         features.update(feature_overrides)
     return select_method_suite(features, access_tier=access_tier, verbose=False), features
@@ -149,7 +137,9 @@ class TestRiskConcentrationRules:
         var_priority format: {qi: (label, percentage)}.
         """
         df, qis, _ = build_dominated_risk_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
 
         # Inject var_priority with (label, percentage) format
         features['var_priority'] = {
@@ -174,7 +164,9 @@ class TestRiskConcentrationRules:
     def test_rc_rules_dormant_without_var_priority(self):
         """Without var_priority, RC rules should NOT fire."""
         df, qis, _ = build_dominated_risk_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
 
         result = risk_concentration_rules(features)
         assert not result.get('applies'), \
@@ -189,7 +181,9 @@ class TestRiskConcentrationRules:
         Regression discovered in Spec 19 Phase 1.4.
         """
         df, qis, _ = build_dominated_risk_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
 
         # Inject var_priority with dominated pattern (would normally fire RC1)
         features['var_priority'] = {
@@ -337,7 +331,9 @@ class TestUniquenessRiskRules:
     def test_hr1_fires_with_injected_uniqueness(self):
         """uniqueness_rate > 0.20 → HR1 LOCSUPR."""
         df, qis, _ = build_extreme_uniqueness_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
 
         # Inject uniqueness_rate (normally dormant)
         features['uniqueness_rate'] = 0.25
@@ -352,7 +348,9 @@ class TestUniquenessRiskRules:
     def test_hr3_fires_with_moderate_uniqueness(self):
         """uniqueness_rate > 0.05, n_qis >= 2 → HR3 kANON."""
         df, qis, _ = build_extreme_uniqueness_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
 
         features['uniqueness_rate'] = 0.08  # between HR2 (0.10) and HR3 (0.05)
 
@@ -370,7 +368,9 @@ class TestUniquenessRiskRules:
         when has_reid=True, preempting HR at priority 15.
         """
         df, qis, _ = build_extreme_uniqueness_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
 
         # Verify uniqueness_rate is non-zero under production semantics
         assert features['uniqueness_rate'] > 0, \
@@ -523,7 +523,9 @@ class TestPublicReleaseRules:
     def test_pub1_defers_to_reg1(self):
         """PUB1 should NOT fire when reid_target_raw=0.03 (regulatory)."""
         df, qis, _ = build_pub1_high_risk_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
         features['_access_tier'] = 'PUBLIC'
         features['_reid_target_raw'] = 0.03
         result = public_release_rules(features)
@@ -566,7 +568,9 @@ class TestSecureEnvironmentRules:
     def test_sec1_skips_low_utility_floor(self):
         """SEC1 should NOT fire when utility_floor < 0.90."""
         df, qis, _ = build_sec1_categorical_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
         features['_access_tier'] = 'SECURE'
         features['_utility_floor'] = 0.80
         result = secure_environment_rules(features)
@@ -602,7 +606,9 @@ class TestRegulatoryComplianceRules:
     def test_reg1_skips_public_release_target(self):
         """REG1 should NOT fire when target=0.01 (public_release)."""
         df, qis, _ = build_reg1_high_risk_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
         features['_access_tier'] = 'PUBLIC'
         features['_reid_target_raw'] = 0.01
         result = regulatory_compliance_rules(features)
@@ -612,7 +618,9 @@ class TestRegulatoryComplianceRules:
     def test_reg1_skips_scientific_tier(self):
         """REG1 should NOT fire under SCIENTIFIC tier."""
         df, qis, _ = build_reg1_high_risk_dataset()
-        features = _build_test_features(df, qis)
+        features = build_data_features(df, qis)
+        features.pop('var_priority', None)
+        features.pop('risk_concentration', None)
         features['_access_tier'] = 'SCIENTIFIC'
         features['_reid_target_raw'] = 0.03
         result = regulatory_compliance_rules(features)
