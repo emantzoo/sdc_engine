@@ -229,6 +229,8 @@ def build_data_features(
     for col in continuous:
         if col not in data.columns:
             continue
+        if not pd.api.types.is_numeric_dtype(data[col]):
+            continue  # discretized string columns (via preprocess_metadata)
         s = data[col].dropna()
         if len(s) < 10:
             continue

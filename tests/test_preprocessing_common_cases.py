@@ -30,19 +30,9 @@ Preprocessing pipeline overview (for future readers):
   cardinality, combination space.  Access tier tightens thresholds
   (PUBLIC strictest, SECURE most relaxed).
 
-Known issues found during test authorship:
-
-- **build_data_features crash on discretized string columns:**
-  When `preprocess_metadata` marks a string column as `was_continuous`,
-  the outlier detection loop (line ~235) tries `s.quantile()` on the
-  string data and raises TypeError.  The `_discretized` classification
-  works correctly (string column is put in `continuous` list), but
-  downstream numeric operations on the `continuous` list don't guard
-  against non-numeric dtype.  Real bug — crash, not just wrong answer.
 """
 import numpy as np
 import pandas as pd
-import pytest
 
 from sdc_engine.sdc.sdc_utils import identify_column_types
 from sdc_engine.sdc.protection_engine import build_data_features
@@ -238,10 +228,6 @@ class TestBuildDataFeatures:
         assert features["geo_qis_by_granularity"]["city"] == "fine"
         assert features["geo_qis_by_granularity"]["region"] == "coarse"
 
-    @pytest.mark.skip(reason=(
-        "known bug — build_data_features outlier loop crashes on discretized "
-        "string columns marked was_continuous in preprocess_metadata "
-        "(TypeError: quantile on strings). See file header for details."))
     def test_preprocess_metadata_overrides_dtype(self):
         """A binned continuous column should stay classified as continuous
         when preprocess_metadata says was_continuous=True."""
