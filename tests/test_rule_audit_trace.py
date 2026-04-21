@@ -147,8 +147,6 @@ class TestAuditFlagOn:
         # First entry should be the pipeline check
         assert trace[0]['rule'] in ('PIPELINE', 'DYN_Pipeline',
                                      'GEO1_Multi_Level_Geographic',
-                                     'P4b_Skewed_Sensitive_Targeted',
-                                     'P4a_Skewed_Structural',
                                      'P5_Small_Dataset_Mixed_Risks')
 
     def test_trace_covers_all_rule_factories(self):

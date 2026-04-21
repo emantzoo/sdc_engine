@@ -48,11 +48,11 @@ flowchart TD
 
         subgraph RULES["Rule Chain — Priority Order"]
             direction TB
-            R1["Pipeline rules\nDYN · GEO1 · P4a/b · P5"]
+            R1["Pipeline rules\nDYN · GEO1 · P5"]
             R2["Small dataset guard\nHR6 &lt;200 rows → LOCSUPR k=3"]
             R3["Structural risk\nSR3 near-unique QI"]
             R4["Risk concentration\nRC1 when var_priority available"]
-            R5["Categorical / temporal / diversity\nCAT1 · LDIV1+DATE1 merged · DP4"]
+            R5["Categorical / temporal / diversity\nCAT1 · LDIV1+DATE1 merged"]
             R6["ReID pattern rules\nQR0–QR4 · MED1 · MED1-high-supp"]
             R7["Low-risk rules\nLOW1–LOW3 when ReID95 ≤20%"]
             R8["Distribution rules\nDP1–DP3 outliers · skew · sensitive"]
@@ -211,11 +211,11 @@ evaluates rules in strict priority order — **first match wins**:
 
 | Priority | Group | Rules | Trigger |
 |---|---|---|---|
-| 1 | **Pipelines** | DYN, GEO1, P4a, P4b, P5 | Multi-method needed; checked before all single-method rules |
+| 1 | **Pipelines** | DYN, GEO1, P5 | Multi-method needed; checked before all single-method rules |
 | 2 | **Small dataset** | HR6 | <200 rows — structural constraint |
 | 3 | **Near-unique** | SR3 | ≤2 QIs + max uniqueness >70% |
 | 4 | **Risk concentration** | RC1 | var_priority available + ReID95 >15% |
-| 5 | **Type/diversity** | CAT1†, LDIV1+DATE1, DP4 | Categorical dominant, l-diversity gap, temporal dominant, integer-coded |
+| 5 | **Type/diversity** | CAT1†, LDIV1+DATE1 | Categorical dominant, l-diversity gap, temporal dominant |
 
 > **Metric-gated:** CAT1 only fires when the active risk metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). When gated out, the engine falls through to QR/MED/LOW rules. (DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory.)
 | 6 | **ReID pattern** | QR0–QR4, MED1, MED1-high-supp | Risk distribution shape drives k/p |
@@ -289,7 +289,7 @@ patterns:
 5. **LOCSUPR tail** — added when kANON is absent and high_risk_rate >15% (k=3); or when
    kANON is present but high_risk_rate >30% and estimated suppression at k=7 <40% (k=7).
 
-Legacy pipelines (P4a, P4b, P5) cover edge cases not handled by the dynamic builder.
+Legacy pipeline P5 covers the sparse mixed-dataset edge case not handled by the dynamic builder.
 
 **Treatment balance** is applied to both single-method and pipeline output before the retry
 engine starts. ≥60% Heavy bumps k +2 (or p/magnitude +0.05). ≥60% Light reduces k -1

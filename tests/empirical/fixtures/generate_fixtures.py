@@ -233,10 +233,10 @@ def g3_dyn_pipeline():
 
 
 def g4_p4b():
-    """G4: P4b pipeline (skewed + sensitive).
+    """G4: P4b pipeline — DELETED in Spec 19 Phase 2.
 
-    Trigger: skewed_count >= 2, has_sensitive_attributes, n_qis >= 2,
-    NOT infeasible, sensitive_column_diversity <= 10.
+    P4b deleted (|skew| > 1.5 gate too narrow, no real dataset reaches it).
+    Generator retained for reference; fixture CSV retained.
     """
     n = 10000
 

@@ -73,8 +73,7 @@ RULE PRIORITY (evaluated in order, first match wins):
     - LOW2: continuous-dominant (≤40%) → NOISE or kANON
     - LOW3: mixed/high-cardinality → kANON
 
-6.  Distribution Rules (DP1-DP4) - Outliers, skewness, sensitive, integer codes
-    - DP4: integer-coded categorical (≤15 unique ints) → PRAM (preserves coding)
+6.  Distribution Rules (DP1-DP3) - Outliers, skewness, sensitive
 
 7.  Uniqueness Risk Rules (HR1-HR6) - Heuristic fallback when no ReID
     - HR6: < 200 rows → LOCSUPR k=3 + hard small-dataset warning
@@ -970,44 +969,8 @@ def distribution_rules(features: Dict) -> Dict:
             'priority': 'RECOMMENDED'
         }
 
-    # DP4: Integer-coded categorical QIs
-    # Numeric columns with ≤15 unique integer values are likely categorical codes
-    # (municipality_code, education_level, etc.).  kANON range-binning ("1-5")
-    # destroys the coding structure — PRAM preserves it.
-    # Reid ceiling tightened from 0.30 to 0.20 (Spec 18 Item 4): at high reid,
-    # QR-family rules provide stronger methods; DP4 serves low-risk data only.
-    integer_coded = features.get('integer_coded_qis', [])
-    reid_95 = features.get('reid_95', 0)
-    if integer_coded and reid_95 <= 0.20:
-        # Scale p_change: more categories → lower perturbation probability
-        n_unique_max = max(
-            features.get('qi_cardinalities', {}).get(qi, 10)
-            for qi in integer_coded
-        )
-        if n_unique_max <= 5:
-            p = 0.30
-        elif n_unique_max <= 10:
-            p = 0.25
-        else:
-            p = 0.20
-        return {
-            'applies': True,
-            'rule': 'DP4_Integer_Coded_Categorical',
-            'method': 'PRAM',
-            'parameters': {'variables': integer_coded[:5], 'p_change': p},
-            'reason': (
-                f"Integer-coded categorical QI(s): {', '.join(integer_coded[:3])} "
-                f"(≤{n_unique_max} unique) — PRAM preserves coding structure, "
-                f"kANON range-binning would destroy category meaning"
-            ),
-            'confidence': 'MEDIUM',
-            'priority': 'RECOMMENDED',
-            'reid_fallback': {
-                'method': 'kANON',
-                'parameters': {'quasi_identifiers': features['quasi_identifiers'], 'k': 5, 'strategy': 'hybrid'},
-            },
-            'utility_fallback': None,
-        }
+    # DP4 deleted in Spec 19 Phase 2 — provably unreachable (LOW3 unconditional
+    # catch-all in low_risk_rules always preempts DP4).
 
     return {'applies': False}
 
@@ -1512,7 +1475,7 @@ def select_method_by_features(
     # 3c. DATE1 - Date-dominant QI sets
     # 4.  ReID Risk Rules (QR0-QR4 + MED1) - Risk distribution patterns
     # 5.  Low-Risk Rules (LOW1-LOW3) - Type-based at ReID_95 <= 20%
-    # 6.  Distribution Rules (DP1-DP4) - Outliers, skewness, integer codes
+    # 6.  Distribution Rules (DP1-DP3) - Outliers, skewness, sensitive
     # 7.  Uniqueness Risk Rules (HR1-HR5) - Heuristic fallback when no ReID
     # 8.  Default Rules - Final fallbacks
     # Note: Pipeline escalation is handled reactively by smart_protect() if needed

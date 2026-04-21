@@ -143,15 +143,6 @@ def build_data_features(
     if n_rows > 0 and qi_cardinalities:
         max_qi_uniqueness = max(nu / n_rows for nu in qi_cardinalities.values())
 
-    # Integer-coded QIs (for DP4: numeric cols with ≤15 unique integer values)
-    integer_coded_qis = []
-    for qi in quasi_identifiers:
-        if qi in data.columns and qi_cardinalities.get(qi, 0) <= 15:
-            if pd.api.types.is_numeric_dtype(data[qi]):
-                non_null = data[qi].dropna()
-                if len(non_null) > 0 and (non_null == non_null.astype(int)).all():
-                    integer_coded_qis.append(qi)
-
     # QI type counts (for DATE1: date-dominant detection)
     _date_hints = {'date', 'time', 'year', 'month', 'quarter', 'period',
                    'day', 'ημερομηνια', 'ημερομηνία', 'ετος', 'έτος'}
@@ -351,7 +342,6 @@ def build_data_features(
         'max_achievable_k': max_k,
         'recommended_qi_to_remove': recommended_qi_to_remove,
         'max_qi_uniqueness': max_qi_uniqueness,
-        'integer_coded_qis': integer_coded_qis,
         'qi_type_counts': qi_type_counts,
         'n_geo_qis': n_geo_qis,
         'geo_qis_by_granularity': geo_qis_by_granularity,

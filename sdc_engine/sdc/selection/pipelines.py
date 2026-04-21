@@ -171,7 +171,9 @@ def build_dynamic_pipeline(features: Dict) -> Dict:
 def _legacy_pipeline_rules(features: Dict) -> Dict:
     """Legacy hardcoded pipelines for edge cases not covered by dynamic builder.
 
-    Kept: P4 (skewed+sensitive) and P5 (small dataset mixed).
+    Kept: P5 (small dataset mixed).
+    P4a/P4b deleted in Spec 19 Phase 2 — P4a had a latent KeyError crash,
+    P4b's |skew| > 1.5 gate was too narrow for any harness dataset.
     """
     # Guard: don't select kANON pipelines when suppression would be catastrophic
     if _is_infeasible(features):
@@ -181,57 +183,6 @@ def _legacy_pipeline_rules(features: Dict) -> Dict:
     qis = features['quasi_identifiers']
     n_continuous = features['n_continuous']
     n_categorical = features['n_categorical']
-
-    # P4: Skewed *continuous* distributions + sensitive attributes.
-    # Categorical dominance is handled by CAT1 (via _has_dominant_categories).
-    # skewed_columns only contains continuous vars with |skewness| > 1.5.
-    # Split into P4a (structural) and P4b (targeted PRAM on sensitive columns).
-    # Previously PRAM was applied to skewed_columns (QIs) instead of sensitive columns.
-    skewed_count = len(features.get('skewed_columns', []))
-    has_sensitive = features.get('has_sensitive_attributes', False)
-    if skewed_count >= 2 and has_sensitive and features.get('n_qis', 0) >= 2:
-        # Identify low-diversity sensitive columns suitable for PRAM.
-        # features only stores the global min diversity (sensitive_column_diversity),
-        # not per-column — use it as proxy: if min diversity <= 10, target all.
-        sens_cols = features.get('sensitive_columns', {})
-        min_sens_div = features.get('sensitive_column_diversity')
-        if min_sens_div is not None and min_sens_div <= 10 and sens_cols:
-            pram_targets = list(sens_cols.keys())[:5]
-        else:
-            pram_targets = []
-
-        if pram_targets:
-            # P4b: PRAM targets sensitive columns (not skewed QIs)
-            return {
-                'applies': True,
-                'rule': 'P4b_Skewed_Sensitive_Targeted',
-                'use_pipeline': True,
-                'pipeline': ['kANON', 'PRAM'],
-                'parameters': {
-                    'kANON': {'quasi_identifiers': qis, 'k': 5, 'strategy': 'generalization'},
-                    'PRAM': {'variables': pram_targets, 'p_change': 0.2}
-                },
-                'reason': (f"{skewed_count} skewed QIs + {len(pram_targets)} low-diversity "
-                           f"sensitive col(s) — PRAM targets sensitive columns"),
-                'confidence': 'HIGH',
-                'priority': 'RECOMMENDED'
-            }
-        else:
-            # P4a: Sensitive columns have high diversity — kANON only, no misapplied PRAM
-            k = 7 if skewed_count >= 3 else 5
-            return {
-                'applies': True,
-                'rule': 'P4a_Skewed_Structural',
-                'use_pipeline': False,
-                'method': 'kANON',
-                'parameters': {
-                    'quasi_identifiers': qis, 'k': k, 'strategy': 'generalization',
-                },
-                'reason': (f"{skewed_count} skewed QIs, sensitive cols have high diversity "
-                           f"— kANON k={k} for structural protection"),
-                'confidence': 'HIGH',
-                'priority': 'RECOMMENDED'
-            }
 
     # P5: Sparse dataset with mixed variables — NOISE handles continuous, PRAM handles categorical
     # Uses density (records / QI combination space) instead of flat record count.

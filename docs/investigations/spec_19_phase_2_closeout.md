@@ -12,7 +12,7 @@ and one gate adjustment were committed:
 | `73a8f6d` | Delete DYN_CAT/CAT2 (self-contradictory) | 13 files, -109 net |
 | `d7bcbc9` | Gate LDIV1 under reid95 > 0.10 | 2 files, +67 |
 
-Pending (batch commit): delete DP4, P4a, P4b.
+All deletions committed.
 
 ## Per-rule verdicts
 
@@ -21,9 +21,9 @@ Pending (batch commit): delete DP4, P4a, P4b.
 | RC2/RC3/RC4 | **Deleted** | Structurally preempted by RC1 (backward elimination contribution has ~50% floor) |
 | DYN_CAT | **Deleted** | Self-contradictory: gated to l_diversity, pipeline used NOISE (blocked for l_diversity) |
 | CAT2 | **Deleted** | Same contradiction as DYN_CAT |
-| DP4 | **Delete** (pending) | Dead code: LOW3 unconditional catch-all always preempts DP4 |
-| P4a | **Delete** (pending) | Crash bug (`KeyError` at `pipelines.py:478`) + no unique value over RC1/DEFAULT |
-| P4b | **Delete** (pending) | |skew| > 1.5 threshold too narrow; no harness dataset reaches it; G4 fixture proves logic but niche is impractical |
+| DP4 | **Deleted** | Dead code: LOW3 unconditional catch-all always preempts DP4 |
+| P4a | **Deleted** | Crash bug (`KeyError` at `pipelines.py:478`) + no unique value over RC1/DEFAULT |
+| P4b | **Deleted** | |skew| > 1.5 threshold too narrow; no harness dataset reaches it; G4 fixture proves logic but niche is impractical |
 | LDIV1 | **Keep with gate** | Reid95 gate added: only fires when reid_95 ≤ 0.10 under reid95 metric. Fires freely under l_diversity |
 | SR3 | **Keep** | Covers large datasets with ≤2 near-unique QIs where HR6 and RC1 both miss |
 | GEO1 | **Keep** | GENERALIZE→kANON is correct SDC for multi-level geo. G2 fixture proves it works |

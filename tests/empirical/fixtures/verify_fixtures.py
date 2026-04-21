@@ -123,12 +123,8 @@ def main():
                "DYN_Pipeline")
     results.append(("G3", "DYN_Pipeline", r))
 
-    # G4: P4b pipeline
-    r = verify("G4_P4b", "fixture_g4_p4.csv",
-               ["income", "wealth", "sex"],
-               "P4b_Skewed_Sensitive_Targeted",
-               sensitive_columns=["disease"])
-    results.append(("G4", "P4b_Skewed_Sensitive_Targeted", r))
+    # G4: P4b pipeline — removed (P4b deleted in Spec 19 Phase 2).
+    # Fixture CSV retained for reference.
 
     # G5: P5 pipeline
     r = verify("G5_P5", "fixture_g5_p5.csv",

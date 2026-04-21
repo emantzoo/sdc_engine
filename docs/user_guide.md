@@ -524,7 +524,7 @@ The rules engine evaluates rules in priority order — **first match wins**. At 
 > CAT1 is **metric-gated**: it only fires when the active metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). (DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory.)
 6. **ReID-based rules** (QR0–QR4, MED1) — risk pattern drives method and k/p selection
 7. **Low-risk rules** (LOW1–LOW3) — type-based when ReID95 ≤20%
-8. **Distribution rules** (DP1–DP4) — outliers, skew, sensitive attributes, integer-coded categoricals
+8. **Distribution rules** (DP1–DP3) — outliers, skew, sensitive attributes
 9. **Uniqueness fallback** (HR1–HR5) — when no ReID is available
 10. **Defaults** — microdata/categorical/continuous/emergency fallbacks
 
@@ -542,7 +542,7 @@ The key principle: **ReID95 determines whether a structural method (kANON, LOCSU
 
 When data characteristics indicate that no single method is sufficient, the system recommends a **pipeline** — applying methods in sequence. Pipeline rules are checked before single-method rules.
 
-Most pipelines are now assembled dynamically based on data features (e.g., continuous outliers → add NOISE, high ReID → add kANON, categorical-dominant → defer to PRAM rules, multi-level geographic → GENERALIZE + kANON). The dynamic builder includes a categorical guard (≥70% categorical defers to CAT1) and a geographic guard (GEO1 for multi-level geo QIs). Legacy pipelines P4a/P4b and P5 handle skewed+sensitive and sparse mixed dataset edge cases.
+Most pipelines are now assembled dynamically based on data features (e.g., continuous outliers → add NOISE, high ReID → add kANON, categorical-dominant → defer to PRAM rules, multi-level geographic → GENERALIZE + kANON). The dynamic builder includes a categorical guard (≥70% categorical defers to CAT1) and a geographic guard (GEO1 for multi-level geo QIs). Legacy pipeline P5 handles the sparse mixed dataset edge case.
 
 > For the full pipeline rule table, dynamic builder logic, triggers, and method parameters, see [Appendix §3 — Method Selection Rules](#3-method-selection-rules).
 
@@ -2173,7 +2173,7 @@ Takes the generalized data and enforces the k-anonymity guarantee through an ite
 
 **Per-QI tuning** (when `var_priority` available): `per_qi_bin_size` injected via `compute_risk_weighted_limits()` — HIGH-risk QIs get smaller bins (÷2, more generalization), LOW-risk QIs get larger bins (×1.5, less generalization).
 
-**In pipelines:** Dynamic pipeline (1st step, k=5–7 hybrid), P4a/P4b (1st, k=5–7 generalization), GEO1 (2nd, k=5 hybrid).
+**In pipelines:** Dynamic pipeline (1st step, k=5–7 hybrid), GEO1 (2nd, k=5 hybrid).
 
 **Fallback order:** LOCSUPR → PRAM → NOISE.
 
@@ -2228,7 +2228,7 @@ Perturbation method for categorical data. Swaps category values with controlled 
 
 **Escalation schedule:** p_change = 0.10 → 0.15 → 0.20 → 0.25 → 0.30 → 0.35 → 0.40 → 0.50.
 
-**In pipelines:** P4b (2nd, after kANON, p_change=0.20 — targets **sensitive columns**), P5 (2nd, after NOISE, p_change=0.30).
+**In pipelines:** P5 (2nd, after NOISE, p_change=0.30).
 
 **Fallback order:** kANON → LOCSUPR → NOISE.
 
@@ -2320,7 +2320,6 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 | LDIV1 | Sensitive column n_unique ≤5 + estimated min_l <2 (attribute disclosure risk) | 0.15 |
 | LDIV1+DATE1 | LDIV1 conditions + ≥50% temporal QIs — merged PRAM on sensitive + date cols | 0.20–0.25 |
 | DATE1 | ≥50% of QIs are temporal + ReID95 ≤40% (preserves temporal distributions) | 0.20–0.25 |
-| DP4 | Integer-coded categorical QIs (≤15 unique ints) + ReID95 ≤20% | 0.20–0.30 |
 | LOW1 | ReID95 ≤10%, categorical-dominant (≥60%), low cardinality | 0.15–0.20 |
 | HR4 | Very small dataset (<100 records), no ReID | 0.30 |
 | HR5 small (no cont.) | Small dataset (100–500), no continuous QIs, no ReID | 0.25 |
@@ -2347,8 +2346,6 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 
 **DATE1 — Temporal-dominant QIs:** When ≥50% of QIs are date/temporal, kANON generalization produces overlapping date ranges that are hard to interpret. PRAM on binned date columns preserves the temporal distribution shape. Note: if LDIV1 also applies, the two rules are merged (see LDIV1 above).
 
-**DP4 — Integer-coded categoricals:** Numeric columns with ≤15 unique integer values (e.g. municipality_code, education_level) are categorical codes. kANON range-binning ("1–5") destroys the coding structure. PRAM preserves it with p_change scaled to the number of categories. Reid ceiling tightened to ≤20% (was ≤30%): at high reid, QR-family rules provide stronger structural methods.
-
 **HR6 — Very small dataset:** Datasets under 200 rows cannot support k≥5 without catastrophic suppression. HR6 fires early (before all other risk rules) and uses LOCSUPR k=3 with max 1 suppression per record. Issues a strong warning recommending synthetic data release.
 
 #### 3.6 Pipeline Rules (Multi-Method Combinations)
@@ -2369,8 +2366,6 @@ Note: kANON and NOISE are mutually exclusive in the dynamic builder — if kANON
 
 | Pipeline | Trigger | Method Sequence | Rationale |
 |----------|---------|-----------------|-----------|
-| **P4b** | ≥2 skewed columns + sensitive attributes (diversity ≤10) + ≥2 QIs | kANON → PRAM | Structure for QIs, PRAM targets **sensitive columns** (not skewed QIs) |
-| **P4a** | ≥2 skewed columns + sensitive attributes (diversity >10) + ≥2 QIs | kANON only | High-diversity sensitive cols — no PRAM (would target wrong columns) |
 | **P5** | Density <5 (records/QI-space) + ≥200 rows + uniqueness >15% + ≥2 continuous + ≥2 categorical | NOISE → PRAM | Sparse mixed dataset — NOISE magnitude scaled by uniqueness (0.10–0.25). Datasets <200 rows deferred to HR6. |
 
 ---

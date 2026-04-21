@@ -158,7 +158,7 @@ The system uses named rules across multiple categories. Rules are evaluated in p
 | **Categorical** | CAT1 | Categorical-dominant data (l_diversity metric only) |
 | **ReID risk** | QR1-QR2 | Severe/heavy tail risk patterns |
 | **Low risk** | LOW1-LOW3 | Already-safe data |
-| **Distribution** | DP1-DP4 | Outliers, skewness, sensitive columns |
+| **Distribution** | DP1-DP3 | Outliers, skewness, sensitive columns |
 | **Special** | LDIV1, DATE1 | L-diversity, temporal-dominant data |
 | **Default** | DEFAULT_* | Catch-all fallbacks |
 
@@ -213,7 +213,7 @@ Method selection follows this priority order:
 4. **Categorical (CAT1)** — Categorical-dominant data (l_diversity metric only)
 5. **ReID risk (QR1-QR2)** — Severe/heavy tail risk
 6. **Low-risk (LOW1-LOW3)** — Already-safe data, perturbation for utility
-7. **Distribution (DP1-DP4)** — Outliers, skewness, sensitive columns
+7. **Distribution (DP1-DP3)** — Outliers, skewness, sensitive columns
 8. **Special (LDIV1, DATE1)** — L-diversity, temporal-dominant
 9. **Default rules** — Final fallbacks
 

@@ -575,20 +575,9 @@ PIPELINE_RULES: Dict[str, Dict[str, Any]] = {
         'confidence': 'HIGH',
         'reason': 'Multiple high-cardinality QIs create vast combination space',
     },
-    'P4a_Skewed_Structural': {
-        'trigger': 'skewed_count>=2 AND has_sensitive AND n_qis>=2 AND sensitive_diversity>10',
-        'pipeline': ['kANON'],
-        'priority': 'RECOMMENDED',
-        'confidence': 'HIGH',
-        'reason': 'Skewed QIs with high-diversity sensitive cols — structural kANON only',
-    },
-    'P4b_Skewed_Sensitive_Targeted': {
-        'trigger': 'skewed_count>=2 AND has_sensitive AND n_qis>=2 AND sensitive_diversity<=10',
-        'pipeline': ['kANON', 'PRAM'],
-        'priority': 'RECOMMENDED',
-        'confidence': 'HIGH',
-        'reason': 'Skewed QIs + low-diversity sensitive cols — PRAM targets sensitive columns',
-    },
+    # P4a_Skewed_Structural and P4b_Skewed_Sensitive_Targeted deleted in
+    # Spec 19 Phase 2 — P4a had a latent KeyError crash, P4b's |skew| > 1.5
+    # gate was too narrow for any harness dataset.
     'P5_Small_Dataset_Mixed_Risks': {
         'trigger': 'density<5 AND n_records>=200 AND uniqueness>0.15 AND n_continuous>=2 AND n_categorical>=2',
         'pipeline': ['NOISE', 'PRAM'],
