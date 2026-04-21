@@ -392,3 +392,63 @@ class TestKnownMetricIssues:
             assert 'GENERALIZE' in methods, (
                 f"GENERALIZE missing from METRIC_ALLOWED_METHODS['{metric}']"
             )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Layer 6 — Smart Combo path: calculate_smart_defaults metric gate
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestSmartDefaultsMetricGate:
+    """calculate_smart_defaults is a parallel method-selection path used by
+    the Smart Combo UI mode.  Its method recommendation must also respect
+    METRIC_ALLOWED_METHODS — otherwise the Smart Combo path can produce
+    PRAM output under k_anonymity/uniqueness metrics.
+
+    Added after retry engine read (Spec 20 follow-up, RF-1).
+    """
+
+    @staticmethod
+    def _make_dataframe(n_qis):
+        """Build a minimal DataFrame with the requested number of QI columns."""
+        import pandas as pd
+        n = 1000
+        cols = {f'qi_{i}': range(n) for i in range(n_qis)}
+        return pd.DataFrame(cols), list(cols.keys())
+
+    @pytest.mark.parametrize("metric", ALL_METRICS)
+    @pytest.mark.parametrize("n_qis", [3, 5, 10])
+    def test_method_allowed_for_metric(self, metric, n_qis):
+        """calculate_smart_defaults must never recommend a method blocked
+        by METRIC_ALLOWED_METHODS for the active metric."""
+        from sdc_engine.sdc.smart_defaults import calculate_smart_defaults
+
+        df, qis = self._make_dataframe(n_qis)
+        defaults = calculate_smart_defaults(
+            df, qis, initial_reid_95=0.30, risk_metric=metric)
+
+        method = defaults['method']
+        allowed = METRIC_ALLOWED_METHODS[metric]
+        assert method in allowed, (
+            f"metric={metric}, n_qis={n_qis}: "
+            f"calculate_smart_defaults recommended '{method}' "
+            f"which is not in METRIC_ALLOWED_METHODS['{metric}']={allowed}"
+        )
+
+    def test_pram_blocked_for_k_anonymity_many_qis(self):
+        """Regression guard: n_qis > 7 used to select PRAM unconditionally.
+        Under k_anonymity, PRAM is blocked — must fall back to kANON."""
+        from sdc_engine.sdc.smart_defaults import calculate_smart_defaults
+
+        df, qis = self._make_dataframe(10)
+        defaults = calculate_smart_defaults(
+            df, qis, initial_reid_95=0.30, risk_metric='k_anonymity')
+
+        assert defaults['method'] != 'PRAM', (
+            "calculate_smart_defaults recommended PRAM under k_anonymity metric"
+        )
+        assert defaults['method'] == 'kANON'
+        # Check reasoning trail includes the fallback explanation
+        reasons = ' '.join(defaults.get('reasoning', []))
+        assert 'blocked' in reasons.lower(), (
+            f"Reasoning should mention metric blocking: {defaults['reasoning']}"
+        )

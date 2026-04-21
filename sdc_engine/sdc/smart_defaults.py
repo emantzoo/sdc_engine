@@ -24,7 +24,7 @@ from sdc_engine.sdc.kANON import apply_kanon
 from sdc_engine.sdc.sdc_utils import calculate_reid
 from sdc_engine.sdc.detection import auto_detect_direct_identifiers
 from sdc_engine.sdc.utility import compute_utility
-from sdc_engine.sdc.config import GENERALIZE_TIERS
+from sdc_engine.sdc.config import GENERALIZE_TIERS, METRIC_ALLOWED_METHODS
 from sdc_engine.sdc.metrics.risk_metric import (
     RiskMetricType, compute_risk, normalize_to_risk_score,
 )
@@ -364,6 +364,27 @@ def calculate_smart_defaults(
         }
         defaults['reasoning'].append(f"Few QIs (n={n_qis}) -> k-ANON (k={k_value})")
 
+    # --- Metric-method gate ---
+    # If the selected method is blocked for the active metric, fall back to
+    # kANON (universally allowed).  Without this check, the Smart Combo path
+    # can produce PRAM output under k_anonymity/uniqueness metrics — a silent
+    # violation of the METRIC_ALLOWED_METHODS contract.
+    _metric = risk_metric or 'reid95'
+    _allowed = METRIC_ALLOWED_METHODS.get(_metric, METRIC_ALLOWED_METHODS['reid95'])
+    if defaults['method'] not in _allowed:
+        blocked_method = defaults['method']
+        defaults['method'] = 'kANON'
+        k_value = 3 if n_records > 10000 else 5
+        defaults['method_params'] = {
+            'k': k_value,
+            'max_suppression_rate': 0.15 if n_records > 10000 else 0.10,
+            'verbose': False
+        }
+        defaults['reasoning'].append(
+            f"{blocked_method} blocked for metric '{_metric}' -> kANON (k={k_value})")
+        log.info("[SmartDefaults] %s blocked for metric '%s', falling back to kANON",
+                 blocked_method, _metric)
+
     log.info("[SmartDefaults] Method: %s  params=%s",
              defaults['method'], defaults['method_params'])
     return defaults
@@ -659,7 +680,7 @@ def apply_smart_workflow_with_adaptive_retry(
         # complexity scores and method selection reflect actual cardinality.
         smart_defaults = calculate_smart_defaults(
             current_data, detected_qis, _reid_after_type_preprocess,
-            qi_treatment=qi_treatment)
+            qi_treatment=qi_treatment, risk_metric=risk_metric)
         smart_defaults['preprocess_params']['max_categories'] = tier['max_categories']
         smart_defaults['preprocess_params']['strategy'] = 'all'  # Force all columns
 
