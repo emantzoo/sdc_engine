@@ -88,6 +88,85 @@ def risk_badge(reid_95: float) -> None:
     )
 
 
+# ── Feasibility badge ────────────────────────────────────────────────
+
+def classify_feasibility(expected_eq_size: float,
+                         qi_cardinalities: dict | None = None,
+                         ) -> tuple[str, str, str, str]:
+    """Map expected_eq_size to a (color, label, message, suggestion) tuple.
+
+    Parameters
+    ----------
+    expected_eq_size : float
+        n_records / combination_space (from diagnose_qis).
+    qi_cardinalities : dict, optional
+        {qi_name: cardinality} — used to identify the highest-cardinality
+        QI for the red-band suggestion.
+
+    Returns
+    -------
+    (color, label, message, suggestion)
+    """
+    if expected_eq_size >= 10:
+        return (
+            "#27ae60",
+            "Comfortable",
+            "Target ReID levels should be achievable.",
+            "",
+        )
+    if expected_eq_size >= 5:
+        return (
+            "#f39c12",
+            "Tight",
+            "Target may require aggressive generalization.",
+            "Consider starting retry at aggressive tier.",
+        )
+    # Red band — find highest-cardinality QI for suggestion
+    top_qi = ""
+    if qi_cardinalities:
+        top_qi = max(qi_cardinalities, key=qi_cardinalities.get)
+    if expected_eq_size >= 2:
+        suggestion = (
+            f"Consider dropping or coarsening `{top_qi}` (highest cardinality)."
+            if top_qi else
+            "Consider dropping or coarsening the highest-cardinality QI."
+        )
+        return (
+            "#e74c3c",
+            "Infeasible for low targets",
+            "ReID_95 \u2264 5% unlikely without heavy suppression.",
+            suggestion,
+        )
+    suggestion = (
+        f"Must reduce QIs \u2014 consider dropping `{top_qi}` (highest cardinality)."
+        if top_qi else
+        "Must reduce QIs \u2014 combination space exceeds dataset size."
+    )
+    return (
+        "#e74c3c",
+        "Infeasible",
+        "Combination space exceeds dataset size.",
+        suggestion,
+    )
+
+
+def feasibility_badge(expected_eq_size: float,
+                      qi_cardinalities: dict | None = None,
+                      ) -> None:
+    """Render a feasibility status badge with optional suggestion."""
+    color, label, message, suggestion = classify_feasibility(
+        expected_eq_size, qi_cardinalities
+    )
+    badge_html = (
+        f'<span style="background:{color};color:white;padding:4px 12px;'
+        f'border-radius:4px;font-weight:bold">{label}</span>'
+        f' &nbsp; <span style="color:#555">{message}</span>'
+    )
+    st.markdown(badge_html, unsafe_allow_html=True)
+    if suggestion:
+        st.caption(f"\U0001f4a1 {suggestion}")
+
+
 # ── Metric cards ──────────────────────────────────────────────────────
 
 def metric_cards(metrics: dict) -> None:

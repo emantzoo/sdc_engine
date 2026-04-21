@@ -11,7 +11,10 @@ import pandas as pd
 import streamlit as st
 
 from state import require_step, reset_downstream
-from components import build_column_stats, risk_badge, metric_cards, recover_numeric_types
+from components import (
+    build_column_stats, risk_badge, metric_cards, recover_numeric_types,
+    feasibility_badge,
+)
 
 require_step("upload", "Please **upload a dataset** first.")
 
@@ -461,11 +464,18 @@ if not qis:
 if st.button("Preview Risk", type="secondary"):
     with st.spinner("Computing re-identification risk..."):
         from sdc_engine.sdc.metrics.reid import calculate_reid
+        from sdc_engine.sdc.preprocessing.diagnose import diagnose_qis
 
         data_typed = recover_numeric_types(data)
         st.session_state["data_typed"] = data_typed
         reid = calculate_reid(data_typed, qis)
         st.session_state["reid_preview"] = reid
+
+        diagnosis = diagnose_qis(data_typed, qis, verbose=False)
+        st.session_state["qi_diagnosis"] = {
+            "expected_eq_size": diagnosis.expected_eq_size,
+            "qi_cardinalities": diagnosis.qi_cardinalities,
+        }
 
 reid = st.session_state.get("reid_preview")
 if reid:
@@ -479,6 +489,15 @@ if reid:
         "High-risk records": f"{reid.get('high_risk_rate', 0):.1%}",
         "min k": min_k,
     })
+
+    # QI space feasibility (Spec 17 — preflight floor estimator)
+    diag = st.session_state.get("qi_diagnosis")
+    if diag:
+        eq_size = diag["expected_eq_size"]
+        st.markdown(
+            f"**QI space feasibility:** {eq_size:.1f} records per equivalence class"
+        )
+        feasibility_badge(eq_size, diag.get("qi_cardinalities"))
 
     qis_str = ", ".join(f"`{q}`" for q in qis)
     st.caption(f"QIs: {qis_str} | Sensitive: {', '.join(f'`{s}`' for s in sensitive) or '(none)'}")

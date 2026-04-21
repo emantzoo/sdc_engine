@@ -177,6 +177,18 @@ Below the role table:
 - **Preview Risk** button — runs `calculate_reid()` on selected QIs and shows:
   - Risk badge (color-coded: LOW, MODERATE, HIGH, VERY HIGH)
   - Metric cards: ReID 50th/95th/99th percentile, high-risk rate, min k (minimum k-anonymity level, derived from 1/max_risk)
+  - **QI space feasibility** (Spec 17) — shows `expected_eq_size` (records per equivalence class) with a status badge:
+
+    | expected_eq_size | Badge | Color | Meaning |
+    |---|---|---|---|
+    | >= 10 | Comfortable | green | Target ReID levels should be achievable |
+    | 5-9 | Tight | amber | Target may require aggressive generalization |
+    | 2-4 | Infeasible for low targets | red | ReID_95 <= 5% unlikely without heavy suppression |
+    | < 2 | Infeasible | red | Combination space exceeds dataset size |
+
+    For red states, the badge identifies the highest-cardinality QI and suggests dropping or coarsening it. For amber, it suggests starting retry at aggressive tier. The indicator is advisory — protection still runs regardless of badge state.
+
+    See [Spec 12 Finding 4](investigations/spec_12_f4_reid_floor.md) for the mathematical background on why `expected_eq_size` determines the achievable ReID floor.
 
 - **Confirm Configuration** button — finalizes column roles, recovers numeric/datetime types from text, and unlocks the Protect page
 

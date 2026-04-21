@@ -134,17 +134,11 @@ The retry engine's "plateau" (reid improvement < 0.001 across escalation steps) 
 3. **k-pruning** — `_prune_schedule_by_max_k()` removes impossible escalation steps
 4. **Plateau detection** — stops escalation if reid improvement < 0.001
 
-### Potential Future Enhancement (Not Scoped)
+### Preflight Floor Warning (Shipped in Spec 17)
 
-A cheap upfront estimator could warn users before they run 10+ iterations into a wall:
+The Configure page's Risk Preview panel now shows a **QI space feasibility** indicator that surfaces `expected_eq_size` with a color-coded badge (Comfortable / Tight / Infeasible) before the user clicks Protect. For red states, it identifies the highest-cardinality QI and suggests dropping or coarsening it.
 
-```
-if expected_eq_size < (1 / reid_target) * 4:
-    warn("Dataset structure limits maximum reid reduction. "
-         "Consider reducing QIs or relaxing target.")
-```
-
-This is ~5 lines in `run_rules_engine_protection()` after `diagnose_qis()`. Not implementing now — flagged for future consideration if user complaints arise.
+This turns "why is my protection plateauing?" into "your QI set is in the infeasible regime" **before** the retry loop runs. See [User Guide §3.5](../user_guide.md#35-risk-preview) for the badge thresholds.
 
 ---
 
