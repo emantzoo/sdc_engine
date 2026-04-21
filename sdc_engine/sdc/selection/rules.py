@@ -1027,6 +1027,13 @@ def l_diversity_rules(features: Dict) -> Dict:
     if risk_metric in ('k_anonymity', 'uniqueness'):
         return {'applies': False}
 
+    # Under reid95 metric, LDIV1's action (PRAM on sensitive columns) doesn't
+    # reduce QI-based re-identification risk.  When reid95 is elevated (>10%),
+    # defer to QR/MED rules that address reid95 directly.  At reid95 ≤ 10%,
+    # QI protection is non-urgent and PRAM-on-sensitive is appropriate.
+    if risk_metric == 'reid95' and features.get('reid_95', 0) > 0.10:
+        return {'applies': False}
+
     sens_div = features.get('sensitive_column_diversity')
     if sens_div is None or sens_div > 5:
         return {'applies': False}

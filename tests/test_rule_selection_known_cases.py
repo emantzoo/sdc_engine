@@ -390,6 +390,66 @@ class TestRulePriority:
 
 
 # ════════════════════════════════════════════════════════════════════════
+# L-diversity rules (LDIV1)
+# ════════════════════════════════════════════════════════════════════════
+
+# LDIV1 features injected via overrides because get_suite/build_data_features
+# doesn't receive sensitive_columns.  The overrides simulate a dataset with
+# binary sensitive column (diversity=2, min_l=1).
+_LDIV1_OVERRIDES = {
+    'sensitive_column_diversity': 2,
+    'min_l': 1,
+    'has_sensitive_attributes': True,
+    'sensitive_columns': {'income': {'n_unique': 2}},
+}
+
+
+class TestLDiversityRules:
+    """LDIV1 fires for low sensitive-column diversity when appropriate."""
+
+    def test_ldiv1_fires_low_reid95(self):
+        """LDIV1 fires under reid95 when reid_95 <= 0.10."""
+        df, qis, _ = build_low1_dataset()  # reid_95 ~ 0.06
+        suite, features = get_suite(df, qis, feature_overrides=_LDIV1_OVERRIDES)
+        assert features['reid_95'] <= 0.10, \
+            f"Precondition: need reid_95 <= 0.10, got {features['reid_95']:.3f}"
+        assert suite['rule_applied'] == 'LDIV1_Low_Sensitive_Diversity', \
+            f"Expected LDIV1 at low reid95, got {suite['rule_applied']}"
+        assert suite['primary'] == 'PRAM'
+
+    def test_ldiv1_gated_high_reid95(self):
+        """LDIV1 must NOT fire under reid95 when reid_95 > 0.10.
+
+        PRAM on sensitive columns doesn't reduce QI-based re-identification
+        risk.  At elevated reid95, defer to QR/MED rules (Spec 19).
+        """
+        df, qis, _ = build_med1_dataset()  # reid_95 ~ 0.25
+        suite, features = get_suite(df, qis, feature_overrides=_LDIV1_OVERRIDES)
+        assert features['reid_95'] > 0.10, \
+            f"Precondition: need reid_95 > 0.10, got {features['reid_95']:.3f}"
+        assert 'LDIV1' not in suite['rule_applied'], \
+            f"LDIV1 should be gated at reid_95={features['reid_95']:.3f}, got {suite['rule_applied']}"
+
+    def test_ldiv1_fires_l_diversity_any_reid(self):
+        """LDIV1 fires under l_diversity metric regardless of reid_95 level."""
+        df, qis, _ = build_med1_dataset()  # reid_95 ~ 0.25
+        overrides = {**_LDIV1_OVERRIDES, '_risk_metric_type': 'l_diversity'}
+        suite, features = get_suite(df, qis, feature_overrides=overrides)
+        assert features['reid_95'] > 0.10, \
+            f"Precondition: need elevated reid_95, got {features['reid_95']:.3f}"
+        assert suite['rule_applied'] == 'LDIV1_Low_Sensitive_Diversity', \
+            f"Expected LDIV1 under l_diversity, got {suite['rule_applied']}"
+
+    def test_ldiv1_gated_k_anonymity(self):
+        """LDIV1 must NOT fire under k_anonymity (PRAM blocked)."""
+        df, qis, _ = build_low1_dataset()
+        overrides = {**_LDIV1_OVERRIDES, '_risk_metric_type': 'k_anonymity'}
+        suite, features = get_suite(df, qis, feature_overrides=overrides)
+        assert 'LDIV1' not in suite['rule_applied'], \
+            f"LDIV1 should be gated for k_anonymity, got {suite['rule_applied']}"
+
+
+# ════════════════════════════════════════════════════════════════════════
 # Context-aware rules (PUB1, SEC1, REG1)
 # ════════════════════════════════════════════════════════════════════════
 
