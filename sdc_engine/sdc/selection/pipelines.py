@@ -296,7 +296,9 @@ def select_method_suite(
     features : dict
         Output from build_data_features()
     access_tier : str
-        Target access tier: 'PUBLIC', 'SCIENTIFIC', or 'SECURE'
+        Target access tier: 'PUBLIC', 'SCIENTIFIC', or 'SECURE'.
+        This parameter is authoritative — it overwrites any
+        ``features['_access_tier']`` value that callers may have set.
     verbose : bool
         Print selection details
 
