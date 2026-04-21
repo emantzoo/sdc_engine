@@ -8,8 +8,8 @@ under another due to metric-specific code paths.
 
 Metrics under test:
     - reid95       (default, all methods allowed)
-    - k_anonymity  (only kANON, LOCSUPR allowed)
-    - uniqueness   (only kANON, LOCSUPR allowed)
+    - k_anonymity  (kANON, LOCSUPR, GENERALIZE, GENERALIZE_FIRST)
+    - uniqueness   (kANON, LOCSUPR, GENERALIZE, GENERALIZE_FIRST)
 
 Key areas covered:
     1. METRIC_ALLOWED_METHODS filtering (config.py)
@@ -400,7 +400,7 @@ class TestMethodSuiteMetricFiltering:
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         primary = suite["primary"]
-        assert primary in {"kANON", "LOCSUPR", "GENERALIZE"}, (
+        assert primary in {"kANON", "LOCSUPR", "GENERALIZE", "GENERALIZE_FIRST"}, (
             f"Under metric={metric}, primary={primary} is not structural"
         )
 
@@ -433,7 +433,7 @@ class TestMethodSuiteMetricFiltering:
         features["_risk_metric_type"] = "reid95"
         suite = select_method_suite(features, access_tier="standard", verbose=False)
         # Under reid95, any method is valid -- just check it does not crash
-        assert suite["primary"] in {"kANON", "LOCSUPR", "PRAM", "NOISE", "GENERALIZE"}
+        assert suite["primary"] in {"kANON", "LOCSUPR", "PRAM", "NOISE", "GENERALIZE", "GENERALIZE_FIRST"}
 
     @pytest.mark.parametrize("metric", STRUCTURAL_ONLY_METRICS)
     def test_categorical_data_forced_structural(
@@ -448,7 +448,7 @@ class TestMethodSuiteMetricFiltering:
         features = build_data_features(categorical_only_df, categorical_only_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
-        assert suite["primary"] in {"kANON", "LOCSUPR", "GENERALIZE"}, (
+        assert suite["primary"] in {"kANON", "LOCSUPR", "GENERALIZE", "GENERALIZE_FIRST"}, (
             f"Expected structural method under {metric}, got {suite['primary']}"
         )
 
@@ -645,7 +645,7 @@ class TestHighRiskForcesStructural:
         features = build_data_features(high_risk_df, high_risk_qis)
         features["_risk_metric_type"] = metric
         suite = select_method_suite(features, access_tier="standard", verbose=False)
-        assert suite["primary"] in {"kANON", "LOCSUPR", "GENERALIZE", "NOISE"}, (
+        assert suite["primary"] in {"kANON", "LOCSUPR", "GENERALIZE", "GENERALIZE_FIRST", "NOISE"}, (
             f"Expected structural-like method for high-risk data under {metric}, "
             f"got {suite['primary']}"
         )
