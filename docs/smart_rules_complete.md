@@ -433,7 +433,6 @@ flowchart TD
         R_DATE["DATE1: Temporal-dominant"]
         R_QR["QR0-QR4 + MED1: ReID risk patterns"]
         R_LOW["LOW1-LOW3: Low risk by type"]
-        R_DP["DP1-DP3: Distribution pattern"]
         R_HR["HR1-HR5: Heuristic fallbacks"]
         R_DEF["Default: Catch-all by type"]
         
@@ -561,13 +560,6 @@ Function gate: `reid_95 > 0.20` → skip. Within that gate:
 | LOW2 (NOISE) | ≤40% categorical + (very low risk OR outliers + ReID ≤ 10%) | NOISE | mag=0.15–0.20 |
 | LOW2 (kANON) | ≤40% categorical + ReID > 5% + no outliers | kANON | k=3–5 |
 | LOW3 | Mixed types (none of above) | kANON | k=3–5 |
-
-#### Distribution Rules (DP) — no ReID available
-
-| Rule | Condition | Method | Params |
-|---|---|---|---|
-| DP1 | Outliers present | NOISE | mag=0.20 |
-| DP2 | ≥2 skewed columns | PRAM | p=0.20 |
 
 #### Heuristic Fallbacks (HR) — no ReID available
 

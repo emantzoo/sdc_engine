@@ -29,7 +29,7 @@ FACTORY_ORDER = [
     'temporal_dominant_rules',     # DATE1
     'reid_risk_rules',             # QR0-QR4, MED1
     'low_risk_rules',              # LOW1-LOW3
-    'distribution_rules',          # DP1-DP3 (dead by position — after LOW3 catch-all)
+    'distribution_rules',          # Empty — DP1-DP3 deleted in Spec 20 A2
     'uniqueness_risk_rules',       # HR1-HR5 (reachable only when has_reid=False)
     'default_rules',               # DEFAULT_* (reachable only after all above fail)
 ]
@@ -196,25 +196,9 @@ CANONICAL_RULES = {
         'factory': 'low_risk_rules',
     },
 
-    # --- Distribution (dead by position — after LOW3 catch-all) ---
-    # These rules are placed after low_risk_rules which has an unconditional
-    # catch-all (LOW3).  They are dead code in the chain but can be triggered
-    # via direct factory call.  Flagged for Test 2 / Spec 21 cleanup.
-    'DP1_Outliers': {
-        'method': 'NOISE',
-        'factory': 'distribution_rules',
-        'dead_by_position': True,
-    },
-    'DP2_Skewed': {
-        'method': 'PRAM',
-        'factory': 'distribution_rules',
-        'dead_by_position': True,
-    },
-    'DP3_Sensitive': {
-        'method': 'kANON',
-        'factory': 'distribution_rules',
-        'dead_by_position': True,
-    },
+    # --- Distribution: DP1-DP3 deleted in Spec 20 A2 (dead-by-position) ---
+    # DP4 deleted in Spec 19 Phase 2. Factory distribution_rules() now returns
+    # {'applies': False} unconditionally. LOW3 catch-all preempted all DP rules.
 
     # --- Uniqueness risk (reachable only when has_reid=False) ---
     'HR1_Extreme_Uniqueness': {

@@ -158,7 +158,6 @@ The system uses named rules across multiple categories. Rules are evaluated in p
 | **Categorical** | CAT1 | Categorical-dominant data (l_diversity metric only) |
 | **ReID risk** | QR1-QR2 | Severe/heavy tail risk patterns |
 | **Low risk** | LOW1-LOW3 | Already-safe data |
-| **Distribution** | DP1-DP3 | Outliers, skewness, sensitive columns |
 | **Special** | LDIV1, DATE1 | L-diversity, temporal-dominant data |
 | **Default** | DEFAULT_* | Catch-all fallbacks |
 
@@ -214,9 +213,8 @@ Method selection follows this priority order (after pipeline check):
 5. **Categorical / diversity / temporal (CAT1, LDIV1, DATE1)** — Type-specific routing
 6. **ReID risk (QR0-QR4, MED1)** — Feasibility + risk pattern
 7. **Low-risk (LOW1-LOW3)** — Already-safe data, perturbation for utility
-8. **Distribution (DP1-DP2)** — Outliers, skewness
-9. **Heuristic fallbacks (HR1-HR5)** — Uniqueness-based when no ReID
-10. **Default rules** — Final fallbacks
+8. **Heuristic fallbacks (HR1-HR5)** — Uniqueness-based when no ReID
+9. **Default rules** — Final fallbacks
 
 ## Pipeline Rules
 

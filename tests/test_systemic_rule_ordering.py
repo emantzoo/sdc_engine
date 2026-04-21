@@ -6,7 +6,7 @@ Validates that:
     1. Factory evaluation order in code matches FACTORY_ORDER in canonical registry
     2. Priority dominance: higher-priority rules win when both match
     3. EMERGENCY_FALLBACK is positioned last (after all factory rules)
-    4. Dead-by-position rules (DP1-DP3) are genuinely preempted by LOW3 catch-all
+    4. distribution_rules returns applies=False (DP1-DP3 deleted in Spec 20)
 
 This is the most sophisticated test — it exercises the chain's ordering
 semantics, not just individual rule behavior.
@@ -276,164 +276,36 @@ class TestEmergencyFallback:
 # Section 4 — Dead-by-position validation
 # ═══════════════════════════════════════════════════════════════════════════
 
-class TestDeadByPosition:
-    """Validate that rules flagged dead_by_position=True in the canonical
-    registry are genuinely preempted by the catch-all above them.
+class TestDistributionRulesEmpty:
+    """Validate that distribution_rules is now empty after DP1-DP3 deletion.
 
-    DP1-DP3 (distribution_rules) are positioned after low_risk_rules in
-    the factory chain. low_risk_rules has an unconditional catch-all (LOW3)
-    that fires for ANY microdata with has_reid=True and reid_95 <= 0.20.
-    distribution_rules also requires has_reid and microdata. So any input
-    that passes distribution_rules' entry conditions also passes
-    low_risk_rules' entry conditions, and LOW3 catches it first.
+    DP1-DP3 were confirmed dead-by-position (Spec 22 Tests 1 and 2) and
+    deleted in Spec 20 A2. distribution_rules() now returns {'applies': False}
+    unconditionally.
     """
 
-    def _get_dead_rules(self):
-        return {
-            name: info for name, info in CANONICAL_RULES.items()
-            if info.get('dead_by_position')
-        }
-
-    def test_dead_rules_exist(self):
-        """At least DP1-DP3 are flagged."""
-        dead = self._get_dead_rules()
-        assert len(dead) >= 3
-        assert 'DP1_Outliers' in dead
-        assert 'DP2_Skewed' in dead
-        assert 'DP3_Sensitive' in dead
-
-    def test_dead_rules_in_distribution_factory(self):
-        """All dead rules belong to distribution_rules factory."""
-        dead = self._get_dead_rules()
-        for name, info in dead.items():
-            assert info['factory'] == 'distribution_rules', (
-                f"Dead rule {name} has factory '{info['factory']}', "
-                f"expected 'distribution_rules'"
-            )
-
-    def test_distribution_after_low_risk_in_order(self):
-        """distribution_rules appears after low_risk_rules in FACTORY_ORDER."""
-        low_idx = FACTORY_ORDER.index('low_risk_rules')
-        dist_idx = FACTORY_ORDER.index('distribution_rules')
-        assert dist_idx > low_idx, (
-            f"distribution_rules (pos {dist_idx}) should be after "
-            f"low_risk_rules (pos {low_idx})"
-        )
-
-    def test_low_risk_preempts_distribution_low_reid(self):
-        """When reid_95 <= 0.20 (low-risk territory), low_risk_rules always fires.
-
-        This is the core dead-by-position proof: distribution_rules
-        requires reid_95 conditions that overlap with low_risk_rules' range,
-        and low_risk_rules fires first with its unconditional catch-all.
-        """
-        from sdc_engine.sdc.selection.rules import (
-            low_risk_rules, distribution_rules,
-        )
-        from tests.test_systemic_rule_coverage import _base_features
-
-        # DP1_Outliers needs: has_outliers, n_continuous > 0, reid_95 moderate
-        features = _base_features(
-            has_outliers=True,
-            n_continuous=2, n_categorical=1,
-            continuous_vars=['x', 'y'],
-            categorical_vars=['a'],
-            reid_95=0.15, reid_50=0.05, reid_99=0.25,
-            risk_pattern='moderate',
-        )
-
-        low_result = low_risk_rules(features)
-        dp_result = distribution_rules(features)
-
-        # low_risk_rules fires (LOW3 or earlier)
-        assert low_result['applies'] is True, (
-            "low_risk_rules should fire for this input"
-        )
-        # distribution_rules also fires (DP1_Outliers)
-        assert dp_result['applies'] is True, (
-            "distribution_rules should fire for this input"
-        )
-        # But in the chain, low_risk_rules is evaluated first → DP1 is dead
-        # The full chain confirms it:
-        from sdc_engine.sdc.selection.pipelines import select_method_suite
-        suite = select_method_suite(features, verbose=False)
-        assert not suite['rule_applied'].startswith('DP'), (
-            f"DP rule '{suite['rule_applied']}' fired through the chain — "
-            f"dead-by-position claim is FALSE. This needs Spec 21 investigation."
-        )
-
-    def test_low_risk_preempts_all_dp_profiles(self):
-        """Sweep multiple profiles that would trigger DP rules.
-        Verify low_risk_rules always fires first in the chain."""
-        from sdc_engine.sdc.selection.rules import (
-            low_risk_rules, distribution_rules,
-        )
-        from sdc_engine.sdc.selection.pipelines import select_method_suite
-        from tests.test_systemic_rule_coverage import _base_features
-
-        profiles = [
-            # DP1 territory: outliers + continuous
-            {
-                'has_outliers': True,
-                'n_continuous': 2, 'n_categorical': 1,
-                'continuous_vars': ['x', 'y'], 'categorical_vars': ['a'],
-                'reid_95': 0.10, 'reid_50': 0.03, 'reid_99': 0.20,
-                'skewed_columns': [],
-            },
-            # DP2 territory: skewed + categorical-dominant
-            {
-                'skewed_columns': ['x'],
-                'n_continuous': 1, 'n_categorical': 2,
-                'continuous_vars': ['x'], 'categorical_vars': ['a', 'b'],
-                'reid_95': 0.12, 'reid_50': 0.05, 'reid_99': 0.22,
-                'has_outliers': False,
-            },
-            # DP3 territory: has_sensitive
-            {
-                'has_sensitive_attributes': True,
-                'sensitive_columns': {'salary': 'sensitive'},
-                'n_continuous': 1, 'n_categorical': 2,
-                'continuous_vars': ['x'], 'categorical_vars': ['a', 'b'],
-                'reid_95': 0.08, 'reid_50': 0.03, 'reid_99': 0.15,
-                'has_outliers': False, 'skewed_columns': [],
-            },
-        ]
-
-        for i, overrides in enumerate(profiles):
-            features = _base_features(**overrides)
-            # Confirm distribution_rules would fire
-            dp_result = distribution_rules(features)
-            if not dp_result.get('applies'):
-                continue  # This profile doesn't trigger DP — skip
-
-            # Confirm low_risk_rules fires
-            lr_result = low_risk_rules(features)
-            assert lr_result['applies'] is True, (
-                f"Profile {i}: low_risk_rules should fire"
-            )
-
-            # Confirm chain selects LOW, not DP
-            suite = select_method_suite(features, verbose=False)
-            assert not suite['rule_applied'].startswith('DP'), (
-                f"Profile {i}: DP rule '{suite['rule_applied']}' fired through chain"
-            )
-
-    def test_dp_rules_callable_directly(self):
-        """DP rules can be triggered via direct factory call (bypassing chain).
-
-        This confirms they're functional code (not broken), just unreachable
-        through the chain due to position.
-        """
+    def test_distribution_rules_always_false(self):
+        """distribution_rules returns applies=False for any input."""
         from sdc_engine.sdc.selection.rules import distribution_rules
-        from tests.test_systemic_rule_coverage import _base_features, _RULE_FEATURES
+        from tests.test_systemic_rule_coverage import _base_features
 
-        for rule_name in ('DP1_Outliers', 'DP2_Skewed', 'DP3_Sensitive'):
-            overrides = _RULE_FEATURES.get(rule_name)
-            if overrides is None:
-                continue
+        # Try inputs that would have triggered DP1, DP2, DP3
+        profiles = [
+            {'has_outliers': True, 'n_continuous': 2, 'continuous_vars': ['x', 'y']},
+            {'skewed_columns': ['x', 'y'], 'has_outliers': False},
+            {'has_sensitive_attributes': True, 'n_qis': 3},
+        ]
+        for overrides in profiles:
             features = _base_features(**overrides)
             result = distribution_rules(features)
-            assert result['applies'] is True, (
-                f"{rule_name} should fire on direct call"
+            assert result['applies'] is False, (
+                f"distribution_rules should be empty after DP1-DP3 deletion"
             )
-            assert result['rule'] == rule_name
+
+    def test_no_dead_by_position_rules_remain(self):
+        """No rules in CANONICAL_RULES have dead_by_position flag."""
+        dead = {
+            name for name, info in CANONICAL_RULES.items()
+            if info.get('dead_by_position')
+        }
+        assert len(dead) == 0, f"Unexpected dead-by-position rules: {dead}"

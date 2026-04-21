@@ -942,44 +942,9 @@ def distribution_rules(features: Dict) -> Dict:
     """
     Rules based on distribution characteristics.
     """
-    # DP1: Outliers → NOISE for continuous perturbation
-    if features['has_outliers'] and features['n_continuous'] > 0:
-        return {
-            'applies': True,
-            'rule': 'DP1_Outliers',
-            'method': 'NOISE',
-            'parameters': {'variables': features['continuous_vars'], 'magnitude': 0.20},
-            'reason': "Outliers present - noise perturbation for continuous data",
-            'confidence': 'HIGH',
-            'priority': 'RECOMMENDED',
-        }
-
-    # DP2: Skewed columns
-    if len(features['skewed_columns']) >= 2:
-        return {
-            'applies': True,
-            'rule': 'DP2_Skewed',
-            'method': 'PRAM',
-            'parameters': {'variables': features['skewed_columns'][:5], 'p_change': 0.2},
-            'reason': f"{len(features['skewed_columns'])} skewed columns",
-            'confidence': 'MEDIUM',
-            'priority': 'RECOMMENDED'
-        }
-
-    # DP3: Sensitive attributes
-    if features['has_sensitive_attributes'] and features['n_qis'] >= 2:
-        return {
-            'applies': True,
-            'rule': 'DP3_Sensitive',
-            'method': 'kANON',
-            'parameters': {'quasi_identifiers': features['quasi_identifiers'], 'k': 5, 'strategy': 'generalization'},
-            'reason': "Sensitive attributes present",
-            'confidence': 'MEDIUM',
-            'priority': 'RECOMMENDED'
-        }
-
-    # DP4 deleted in Spec 19 Phase 2 — provably unreachable (LOW3 unconditional
-    # catch-all in low_risk_rules always preempts DP4).
+    # DP1-DP4 deleted: DP4 in Spec 19 Phase 2, DP1-DP3 in Spec 20 A2.
+    # All were dead-by-position — LOW3 (unconditional catch-all in low_risk_rules)
+    # always fires first. Confirmed by Spec 22 Tests 1 and 2.
 
     return {'applies': False}
 

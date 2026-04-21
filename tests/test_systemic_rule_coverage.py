@@ -7,11 +7,9 @@ rule name.  This catches:
   - Renamed rules (canonical list drift from code)
   - New rules missing from the canonical list (staleness guard)
 
-DP1-DP3 note: These rules are dead-by-position (placed after LOW3
-unconditional catch-all in low_risk_rules).  They are tested here via
-direct factory calls, bypassing the chain.  Their dead-by-position
-status is validated in Test 2 (rule ordering) and flagged for Spec 21
-cleanup.  See docs/investigations/unconditional_catchall_audit.md.
+DP1-DP3 were deleted in Spec 20 A2 (dead-by-position after LOW3
+unconditional catch-all).  distribution_rules() now returns
+{'applies': False} unconditionally.
 """
 
 import ast
@@ -493,26 +491,7 @@ _RULE_FEATURES = {
         'risk_pattern': 'uniform_low',
     },
 
-    # --- Distribution (dead by position — tested via direct factory call) ---
-    'DP1_Outliers': {
-        'has_outliers': True,
-        'n_continuous': 2,
-        'continuous_vars': ['age', 'income'],
-    },
-    'DP2_Skewed': {
-        'skewed_columns': ['age', 'income'],
-        'has_outliers': False,
-        'n_continuous': 0,
-        'continuous_vars': [],
-    },
-    'DP3_Sensitive': {
-        'has_sensitive_attributes': True,
-        'n_qis': 3,
-        'skewed_columns': [],
-        'has_outliers': False,
-        'n_continuous': 0,
-        'continuous_vars': [],
-    },
+    # --- Distribution: DP1-DP3 deleted in Spec 20 A2 (dead-by-position) ---
 
     # --- Uniqueness risk (has_reid=False path) ---
     'HR1_Extreme_Uniqueness': {

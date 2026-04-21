@@ -536,9 +536,8 @@ The rules engine evaluates rules in priority order — **first match wins**. At 
 > CAT1 is **metric-gated**: it only fires when the active metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). (DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory.)
 6. **ReID-based rules** (QR0–QR4, MED1) — risk pattern drives method and k/p selection
 7. **Low-risk rules** (LOW1–LOW3) — type-based when ReID95 ≤20%
-8. **Distribution rules** (DP1–DP3) — outliers, skew, sensitive attributes
-9. **Uniqueness fallback** (HR1–HR5) — when no ReID is available
-10. **Defaults** — microdata/categorical/continuous/emergency fallbacks
+8. **Uniqueness fallback** (HR1–HR5) — when no ReID is available
+9. **Defaults** — microdata/categorical/continuous/emergency fallbacks
 
 The key principle: **ReID95 determines whether a structural method (kANON, LOCSUPR) is required** — perturbation methods (PRAM, NOISE) cannot reduce equivalence-class-based risk and are only selected when risk is already low or for categorical/continuous-specific scenarios.
 
@@ -2299,7 +2298,6 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 | LOW3 | ReID95 ≤20%, mixed or high-cardinality | 3 or 5 | generalization |
 | HR2 | Uniqueness >10%, no ReID available | 7† | hybrid |
 | HR3 | Uniqueness >5% + ≥2 QIs, no ReID | 5† | generalization |
-| DP3 | Sensitive attributes + ≥2 QIs | 5 | generalization |
 | DEFAULT | Microdata with ≥2 QIs, no other match | 3 | generalization |
 | EMERGENCY | Nothing matched at all | 5 | — |
 
@@ -2335,7 +2333,6 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 | LOW1 | ReID95 ≤10%, categorical-dominant (≥60%), low cardinality | 0.15–0.20 |
 | HR4 | Very small dataset (<100 records), no ReID | 0.30 |
 | HR5 small (no cont.) | Small dataset (100–500), no continuous QIs, no ReID | 0.25 |
-| DP2 | ≥2 skewed columns | 0.20 |
 | DEFAULT categorical | Mostly categorical, no other match | 0.20 |
 | DEFAULT fallback | Nothing else matched | 0.20 |
 
@@ -2345,7 +2342,6 @@ Before the rule chain executes, a **metric compatibility filter** checks every c
 |------|-----------|-----------|
 | LOW2 noise | ReID95 ≤5% (very low) or ≤10% with outliers, continuous-dominant | 0.15–0.20 |
 | HR5 small (cont.) | Small dataset (100–500), has continuous QIs, no ReID | 0.15 |
-| DP1 | Outliers present + continuous data | 0.20 |
 | DEFAULT continuous | Mostly continuous, no other match | 0.15 |
 
 #### 3.5 Rule Design Rationale
