@@ -57,17 +57,15 @@ from tests.fixtures.rule_test_builders import (
 # ════════════════════════════════════════════════════════════════════════
 
 def _build_test_features(df, qis):
-    """Build features for testing, matching legacy extract_data_features_with_reid scope.
+    """Build features for testing with two remaining overlay adjustments.
 
-    Three divergences between build_data_features and the old function:
-    1. continuous/categorical vars: old used all columns (via analyze_data),
-       new scopes to QI-only columns.
-    2. risk_pattern: old used classify_risk_pattern from metrics.reid (tail_ratio
-       based), new uses an inline classifier with stricter reid_95 thresholds.
-    3. uniqueness_rate: old got 0 from analysis dict, new computes QI-combo
-       uniqueness (non-zero).
+    Divergence 1 (continuous/categorical scope) resolved: builders now
+    produce datasets with genuinely continuous QIs (>20 unique numeric
+    values) so build_data_features QI-only scope matches test intent.
 
-    This helper overlays all three to preserve test semantics.
+    Two remaining overlays (will be removed in Tasks 3b/3c):
+    2. risk_pattern: production inline classifier vs metrics.reid classifier
+    3. uniqueness_rate: production QI-combo uniqueness vs analysis-derived
     """
     from sdc_engine.sdc.sdc_utils import analyze_data
     from sdc_engine.sdc.metrics.reid import classify_risk_pattern
@@ -75,13 +73,6 @@ def _build_test_features(df, qis):
     # Strip auto-computed var_priority so RC rules stay dormant by default.
     features.pop('var_priority', None)
     features.pop('risk_concentration', None)
-    # 1. Overlay analysis-scoped continuous/categorical vars
-    analysis = analyze_data(df, quasi_identifiers=qis, verbose=False)
-    features['continuous_vars'] = analysis.get('continuous_variables', [])
-    features['categorical_vars'] = analysis.get('categorical_variables', [])
-    features['n_continuous'] = len(features['continuous_vars'])
-    features['n_categorical'] = len(features['categorical_vars'])
-    features['n_columns'] = len(df.columns)
     # 2. Overlay canonical risk_pattern from metrics.reid classifier
     if features.get('has_reid'):
         reid_metrics = {
@@ -94,6 +85,7 @@ def _build_test_features(df, qis):
         features['risk_pattern'] = pattern
         features['risk_level'] = pattern
     # 3. Overlay legacy uniqueness_rate (analysis-derived, typically 0)
+    analysis = analyze_data(df, quasi_identifiers=qis, verbose=False)
     features['uniqueness_rate'] = analysis.get('uniqueness_rate', 0)
     return features
 
@@ -471,8 +463,13 @@ class TestLDiversityRules:
             f"LDIV1 should be gated at reid_95={features['reid_95']:.3f}, got {suite['rule_applied']}"
 
     def test_ldiv1_fires_l_diversity_any_reid(self):
-        """LDIV1 fires under l_diversity metric regardless of reid_95 level."""
-        df, qis, _ = build_med1_dataset()  # reid_95 ~ 0.25
+        """LDIV1 fires under l_diversity metric regardless of reid_95 level.
+
+        Uses sec1_continuous dataset (cat_ratio=0.50, reid_95~0.14) to avoid
+        triggering CAT1 (requires cat_ratio >= 0.70) while still having
+        elevated reid_95.
+        """
+        df, qis, _ = build_sec1_continuous_dataset()  # reid_95 ~ 0.14
         overrides = {**_LDIV1_OVERRIDES, '_risk_metric_type': 'l_diversity'}
         suite, features = get_suite(df, qis, feature_overrides=overrides)
         assert features['reid_95'] > 0.10, \

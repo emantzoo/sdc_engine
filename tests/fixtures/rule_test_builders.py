@@ -200,32 +200,40 @@ def build_low1_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
 
 def build_low2_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
     """Triggers LOW2_Continuous_Noise → NOISE.
-    Verified: cat_ratio=0.25, reid_95=0.010.
+
+    Needs cat_ratio <= 0.40 under QI-only scope.  Numeric QIs must
+    have >20 unique values so build_data_features classifies them
+    as continuous (threshold: nunique > 20).  QI cardinality product
+    must be << n_records to keep reid_95 <= 0.05 (very low).
+    Solution: 1 cat (sex 2) + 2 cont (age 21, income_k 22).
+    QI space: 2 × 21 × 22 = 924 combos.  n=30000 → avg EQ size ~32.
+    Verified: cat_ratio=0.33, reid_95=0.04.
     """
     rng = _rng()
-    n = 8000
+    n = 30000
     df = pd.DataFrame({
         'sex': rng.choice(['M', 'F'], n),
-        'age_group': rng.choice([20, 40, 60], n),
-        'income_level': rng.choice([30, 50, 70], n),
-        'score': rng.choice([1, 3, 5, 7], n),
+        'age': rng.integers(20, 41, n),        # 21 unique → continuous
+        'income_k': rng.integers(20, 42, n),   # 22 unique → continuous
     })
-    return df, ['sex', 'age_group', 'income_level', 'score'], []
+    return df, ['sex', 'age', 'income_k'], []
 
 
 def build_low3_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
     """Triggers LOW3_Mixed → kANON.
-    Verified: cat_ratio=0.50, reid_95=0.040.
+
+    Needs cat_ratio ~0.50 under QI-only scope.  One categorical QI
+    (string dtype) + one continuous QI (numeric with >20 uniques).
+    QI space: 3 × 21 = 63 combos.  n=5000 → avg EQ size ~79.
+    Verified: cat_ratio=0.50, reid_95=0.016.
     """
     rng = _rng()
     n = 5000
     df = pd.DataFrame({
-        'sex': rng.choice(['M', 'F'], n),
         'region': rng.choice(['N', 'S', 'E'], n),
-        'age': rng.choice([20, 30, 40, 50, 60], n),
-        'score': rng.choice([1, 2, 3, 4, 5], n),
+        'age': rng.integers(20, 41, n),         # 21 unique → continuous
     })
-    return df, ['sex', 'region', 'age', 'score'], []
+    return df, ['region', 'age'], []
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -339,19 +347,19 @@ def build_sec1_categorical_dataset() -> Tuple[pd.DataFrame, List[str], List[str]
 
 def build_sec1_continuous_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
     """Triggers SEC1_Secure_Continuous under SECURE tier.
-    Verified: cat_ratio < 0.60, n_continuous > 0, reid_95 in [0.05, 0.25].
 
-    Uses low2 shape but with fewer rows to push reid_95 into range.
+    Needs cat_ratio < 0.60, n_continuous > 0, reid_95 in [0.05, 0.25]
+    under QI-only scope.  One categorical QI + one continuous QI.
+    QI space: 2 × 21 = 42 combos.  n=500 → avg EQ ~12.
+    Verified: cat_ratio=0.50, reid_95=0.14.
     """
     rng = _rng()
     n = 500
     df = pd.DataFrame({
         'sex': rng.choice(['M', 'F'], n),
-        'age_group': rng.choice([20, 40, 60], n),
-        'income_level': rng.choice([30, 50, 70], n),
-        'score': rng.choice([1, 3, 5, 7], n),
+        'age': rng.integers(20, 41, n),         # 21 unique → continuous
     })
-    return df, ['sex', 'age_group', 'income_level', 'score'], []
+    return df, ['sex', 'age'], []
 
 
 def build_reg1_high_risk_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
