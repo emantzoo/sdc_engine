@@ -32,14 +32,6 @@ Preprocessing pipeline overview (for future readers):
 
 Known issues found during test authorship:
 
-- **_is_sequential_id false positive on integer-coded categoricals:**
-  `sdc_utils._is_sequential_id` operates on all N sorted rows (not unique
-  values), so the median diff of repeating integers 1-8 is 0.  Since
-  min_val >= 0 and median_diff <= 1.5, it classifies the column as
-  sequential ID.  True sequential IDs have near-100% uniqueness; this
-  heuristic doesn't check uniqueness ratio.  Design limitation, not a
-  crash bug.
-
 - **build_data_features crash on discretized string columns:**
   When `preprocess_metadata` marks a string column as `was_continuous`,
   the outlier detection loop (line ~235) tries `s.quantile()` on the
@@ -156,16 +148,13 @@ class TestTypeDetection:
     """identify_column_types and build_data_features classification."""
 
     def test_integer_coded_categorical(self):
-        """Integer-coded categories (e.g., education levels 10,20,...,80)
-        should be classified as categorical, not continuous.
-        Note: values must start above 10 (avoids _is_sequential_id
-        false positive) and column name must not contain id_keywords
-        like 'code'."""
-        codes = [11, 22, 33, 44, 55, 66, 77, 88]
-        df = _df(1000, education=lambda rng: rng.choice(codes, 1000))
+        """Integer-coded categories (e.g., occupation codes 1-8) should be
+        classified as categorical, not continuous.
+        Note: column name must not contain id_keywords like 'code'."""
+        df = _df(1000, occupation=lambda rng: rng.integers(1, 9, 1000))
         types = identify_column_types(df)
-        assert types["education"] == "categorical", (
-            f"Integer-coded categorical (8 unique ints) classified as {types['education']}")
+        assert types["occupation"] == "categorical", (
+            f"Integer-coded categorical (8 unique ints) classified as {types['occupation']}")
 
     def test_true_continuous_integer(self):
         """A high-cardinality integer column (count data) should be classified

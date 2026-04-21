@@ -943,6 +943,12 @@ def _is_sequential_id(series: pd.Series) -> bool:
     if not (series % 1 == 0).all():
         return False
 
+    # Sequential IDs are unique per row — integer-coded categoricals
+    # (e.g., occupation codes 1-8) have many repeats.
+    uniqueness = series.nunique() / len(series) if len(series) > 0 else 0
+    if uniqueness < 0.5:
+        return False
+
     # Check if starts near 0 or 1
     min_val = series.min()
     if min_val > 10:  # Sequential IDs usually start low
