@@ -39,11 +39,11 @@ RULE PRIORITY (evaluated in order, first match wins):
     - SEC1_cat: 5% < reid_95 ≤ 25%, cat ≥ 60% → PRAM p=0.10-0.225
     - SEC1_cont: 5% < reid_95 ≤ 25%, continuous present → NOISE mag=0.05-0.175
 
-3.  Categorical-Aware Rules (CAT1-CAT2) - PRAM for categorical data at moderate risk
+3.  Categorical-Aware Rules (CAT1) - PRAM for categorical data at moderate risk
     - GATED: only fires when risk_metric is l_diversity (PRAM invalidates
       frequency-count metrics like reid_95, k_anonymity, uniqueness)
     - CAT1: ≥70% categorical + ReID95 15-40% + no near-constant QIs → PRAM
-    - CAT2: 50-70% categorical + ReID95 15-50% + continuous present → [NOISE, PRAM] pipeline
+    - CAT2 deleted: self-contradictory (NOISE in pipeline, blocked for l_diversity)
 
 3b. L-Diversity Rules (LDIV1) - Sensitive column attribute disclosure
     - LDIV1: sensitive col n_unique ≤ 5 + estimated min_l < 2 → PRAM on sensitive cols
@@ -494,7 +494,10 @@ def _has_dominant_categories(features, threshold=0.80):
 
 
 def categorical_aware_rules(features: Dict) -> Dict:
-    """CAT1/CAT2: Select PRAM when categorical data dominates at moderate risk.
+    """CAT1: Select PRAM when categorical data dominates at moderate risk.
+
+    CAT2 deleted in Spec 19 Phase 2 — self-contradictory: gated to l_diversity
+    but pipeline contained NOISE (blocked for l_diversity).
 
     Fills the gap where kANON was always selected at 15-40% risk even for
     predominantly categorical data.  PRAM preserves all records while kANON
@@ -543,35 +546,9 @@ def categorical_aware_rules(features: Dict) -> Dict:
             'utility_fallback': {'method': 'PRAM', 'parameters': {'variables': top_categorical_qis(features), 'p_change': max(0.10, p - 0.10)}},
         }
 
-    # CAT2: Moderate-to-elevated risk + mixed but categorical majority → pipeline [NOISE, PRAM]
-    # Extended upper bound from 0.35 to 0.50 to cover previously unhandled gap
-    if (0.15 <= reid_95 <= 0.50
-            and 0.50 < cat_ratio < 0.70
-            and n_cont >= 1):
-        p = 0.30 if reid_95 > 0.35 else 0.25
-        mag = 0.20 if reid_95 > 0.35 else 0.15
-        return {
-            'applies': True,
-            'rule': 'CAT2_Mixed_Categorical_Majority',
-            'use_pipeline': True,
-            'pipeline': ['NOISE', 'PRAM'],
-            'parameters': {
-                'NOISE': {'variables': features['continuous_vars'], 'magnitude': mag},
-                'PRAM': {'variables': top_categorical_qis(features), 'p_change': p},
-            },
-            'reason': (f"Mixed types ({n_cat} cat + {n_cont} cont) at moderate risk "
-                       f"(ReID95={reid_95:.1%}) — split approach: NOISE for numerics, PRAM for categoricals"),
-            'confidence': 'MEDIUM',
-            'priority': 'RECOMMENDED',
-            'reid_fallback': {
-                'method': 'kANON',
-                'parameters': {'quasi_identifiers': qis, 'k': 5, 'strategy': 'hybrid'},
-            },
-            'utility_fallback': {
-                'method': 'PRAM',
-                'parameters': {'variables': top_categorical_qis(features), 'p_change': max(0.10, p - 0.10)},
-            },
-        }
+    # CAT2 deleted in Spec 19 Phase 2 — self-contradictory (NOISE in pipeline,
+    # blocked for l_diversity).  The 50-70% categorical window now falls
+    # through to QR/MED/LOW rules which select kANON.
 
     return {'applies': False}
 
@@ -1523,7 +1500,7 @@ def select_method_by_features(
     # 1b. HR6 - Very small dataset (< 200 rows) — structural constraint
     # 1c. SR3 - Near-unique QI with few QIs (no var_priority needed)
     # 2.  Risk Concentration Rules (RC1-RC4) - Per-QI risk data
-    # 3.  Categorical-Aware Rules (CAT1-CAT2) - PRAM at moderate risk
+    # 3.  Categorical-Aware Rules (CAT1) - PRAM at moderate risk
     # 3b. LDIV1 - l-diversity gap for sensitive columns
     # 3c. DATE1 - Date-dominant QI sets
     # 4.  ReID Risk Rules (QR0-QR4 + MED1) - Risk distribution patterns

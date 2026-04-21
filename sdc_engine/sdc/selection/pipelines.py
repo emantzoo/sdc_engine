@@ -70,47 +70,8 @@ def build_dynamic_pipeline(features: Dict) -> Dict:
             log.info("[Pipeline] Skipping dynamic pipeline — cat_ratio=%.0f%%, "
                      "categorical-dominant", cat_ratio * 100)
             return {'applies': False}
-        if (0.50 < cat_ratio < 0.70 and n_cont >= 1
-                and features.get('_risk_metric_type', 'reid95') in ('l_diversity',)):
-            # DYN_CAT: NOISE on continuous + PRAM on categorical + optional LOCSUPR
-            dyn_cat_pipeline = ['NOISE', 'PRAM']
-            dyn_cat_params = {
-                'NOISE': {
-                    'variables': features['continuous_vars'],
-                    'magnitude': 0.15 if reid_95 <= 0.30 else 0.20,
-                },
-                'PRAM': {
-                    'variables': top_categorical_qis(features),
-                    'p_change': 0.30 if reid_95 > 0.30 else 0.25,
-                },
-            }
-            if high_risk_rate > 0.15:
-                dyn_cat_pipeline.append('LOCSUPR')
-                dyn_cat_params['LOCSUPR'] = {
-                    'quasi_identifiers': qis, 'k': 3,
-                }
-            return {
-                'applies': True,
-                'rule': 'DYN_CAT_Pipeline',
-                'use_pipeline': True,
-                'pipeline': dyn_cat_pipeline,
-                'parameters': dyn_cat_params,
-                'reason': (f"Dynamic categorical pipeline "
-                           f"({n_cat} cat + {n_cont} cont, ReID95={reid_95:.1%})"),
-                'confidence': 'HIGH',
-                'priority': 'REQUIRED',
-                'reid_fallback': {
-                    'method': 'kANON',
-                    'parameters': {'quasi_identifiers': qis, 'k': 5, 'strategy': 'hybrid'},
-                },
-                'utility_fallback': {
-                    'method': 'PRAM',
-                    'parameters': {
-                        'variables': top_categorical_qis(features),
-                        'p_change': max(0.10, dyn_cat_params['PRAM']['p_change'] - 0.10),
-                    },
-                },
-            }
+        # DYN_CAT deleted in Spec 19 Phase 2 — self-contradictory: gated to
+        # l_diversity but pipeline contains NOISE (blocked for l_diversity).
 
     # GEO1: Multi-level geographic QIs — generalize fine-grained geos first
     geo_gran = features.get('geo_qis_by_granularity', {})
@@ -583,7 +544,7 @@ def select_method_suite(
             # Apply treatment balance post-adjustment
             rule = _apply_treatment_balance(rule, features.get('qi_treatment'))
 
-            # Handle pipeline-format rules from the single-method chain (e.g., CAT2)
+            # Handle pipeline-format rules from the single-method chain
             if rule.get('use_pipeline'):
                 pipeline = rule['pipeline']
                 # Skip entire pipeline if any method is blocked for this metric

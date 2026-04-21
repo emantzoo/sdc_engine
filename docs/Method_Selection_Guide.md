@@ -40,7 +40,7 @@ This creates a hard decision boundary:
 IF ReID95 > 5%:
     → MUST use structural method (kANON or LOCSUPR)
     → Perturbation CANNOT fix the problem
-    → Rules QR0-QR4, MED1, CAT1-CAT2 (l_diversity only), LOW1-LOW3 select the specific method
+    → Rules QR0-QR4, MED1, CAT1 (l_diversity only), LOW1-LOW3 select the specific method
 
 IF ReID95 ≤ 5%:
     → Data is already structurally safe
@@ -155,7 +155,7 @@ The system uses named rules across multiple categories. Rules are evaluated in p
 | **Feasibility** | QR0 | K-anonymity feasibility check |
 | **Structural risk** | SR3, HR1-HR6 | Near-unique records, small datasets |
 | **Risk concentration** | RC1 | Backward elimination risk patterns |
-| **Categorical** | CAT1-CAT2 | Categorical-dominant data (l_diversity metric only) |
+| **Categorical** | CAT1 | Categorical-dominant data (l_diversity metric only) |
 | **ReID risk** | QR1-QR2 | Severe/heavy tail risk patterns |
 | **Low risk** | LOW1-LOW3 | Already-safe data |
 | **Distribution** | DP1-DP4 | Outliers, skewness, sensitive columns |
@@ -209,8 +209,8 @@ Method selection follows this priority order:
 
 1. **Feasibility (QR0)** — K-anonymity feasibility check
 2. **Structural risk (SR3, HR1-HR6)** — Near-unique records, small datasets
-3. **Risk concentration (RC1-RC4)** — Backward elimination risk patterns
-4. **Categorical (CAT1-CAT2)** — Categorical-dominant data (l_diversity metric only)
+3. **Risk concentration (RC1)** — Backward elimination risk patterns
+4. **Categorical (CAT1)** — Categorical-dominant data (l_diversity metric only)
 5. **ReID risk (QR1-QR2)** — Severe/heavy tail risk
 6. **Low-risk (LOW1-LOW3)** — Already-safe data, perturbation for utility
 7. **Distribution (DP1-DP4)** — Outliers, skewness, sensitive columns

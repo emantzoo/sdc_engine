@@ -42,13 +42,12 @@ All thresholds were tuned against Greek property/demographic datasets during dev
 
 **File:** `selection/rules.py` — `categorical_aware_rules()`
 
-> **Metric gate (Spec 12 F3a):** CAT1, CAT2, and DYN_CAT are gated to `l_diversity` metric only. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). When metric is not l_diversity, these rules return `applies: False`.
+> **Metric gate (Spec 12 F3a):** CAT1 is gated to `l_diversity` metric only. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). When metric is not l_diversity, CAT1 returns `applies: False`. (DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory.)
 
 | Threshold | Value | Routes to |
 |---|---|---|
 | CAT1 gate | **l_diversity** + cat_ratio ≥ 0.70 | PRAM p=0.25-0.35 |
-| CAT2 gate | **l_diversity** + 0.50 < cat_ratio < 0.70 | Pipeline: NOISE → PRAM |
-| Below 0.50 or non-l_diversity metric | — | Falls through to QR rules → kANON |
+| Below 0.70 or non-l_diversity metric | — | Falls through to QR rules → kANON |
 
 **What to test:** Under l_diversity metric: datasets with 60%, 65%, 70%, 75% categorical QIs at moderate risk (ReID 15-30%). Compare PRAM vs kANON outcomes. Under reid_95/k_anonymity: verify CAT1 never fires.
 
@@ -503,7 +502,6 @@ These are the only thresholds grounded in published SDC literature rather than e
 
 | Pipeline | Trigger | Methods | Confidence |
 |---|---|---|---|
-| DYN_CAT | 50-70% categorical + ≥1 continuous + reid > 15% | NOISE → PRAM | Medium-high — the 15% reid gate untested |
 | GEO1 | ≥2 geo QIs (fine + coarse) | GENERALIZE → kANON k=5 | High — geo detection is strict |
 | DYN | reid > 20% + mixed types + outliers | kANON/NOISE/LOCSUPR | Medium — complex multi-condition |
 | P4 | ≥2 skewed + sensitive | kANON ± PRAM | Medium — skew threshold ≥2 |
@@ -513,8 +511,6 @@ These are the only thresholds grounded in published SDC literature rather than e
 
 | Context | Value | Confidence |
 |---|---|---|
-| DYN_CAT PRAM p | 0.25-0.30 (scales with reid) | Medium |
-| DYN_CAT NOISE mag | 0.15-0.20 | Medium |
 | P5 NOISE mag | Scales with uniqueness | Medium-low |
 | P5 PRAM p | 0.30 | Medium |
 
@@ -674,7 +670,7 @@ Of the ~90 thresholds added above, **8 are higher impact than P3**:
 |---|---|---|---|
 | QR2 heavy tail gate | reid_95 > 40% | kANON k=7 vs LOCSUPR k=5 — wrong method | ✅ Fallback chain (kANON → LOCSUPR), 1 wasted iteration |
 | QR4 moderate | reid_50 > 15% + reid_95 30-50% | k=7 vs k=10 — big suppression diff | ✅ **k step-down** catches this post-success |
-| DYN_CAT reid gate | reid > 15% | Pipeline fires or doesn't — multi vs single method | ✅ Pipeline failure falls to single-method rules |
+| ~~DYN_CAT reid gate~~ | ~~reid > 15%~~ | ~~Pipeline fires or doesn't~~ | Deleted — Spec 19 Phase 2 |
 | HR4/HR5 small dataset | <100 / 100-500 rows | Wrong method on tiny data | ✅ HR6 catches <200, HR4 <100 |
 | kANON strategy | 10%/40% violation split | Wrong internal strategy | ✅ Retry escalates through strategies |
 | PRAM dominance | >80% single category | PRAM useless on dominant cats | ✅ Smart config switches to kANON pre-application |
@@ -712,12 +708,12 @@ One threshold differs between branches and should be reconciled:
 
 ### Known-Case Regression Tests (`tests/test_rule_selection_known_cases.py`)
 
-42 tests across 12 test classes verifying that each rule fires as designed on synthetic data. Each test constructs a minimal dataset targeting exactly one rule (or a specific guard condition). Covers QR1, QR2, QR4, MED1, RC1 (both injected and organic), CAT1, CAT2 via DYN_CAT_Pipeline, LOW1, LOW2, LOW3, SR3, HR6, HR1/HR3 (injected), PUB1/SEC1/REG1 (context-aware), rule priority ordering, dominance guard, and metric-filter edge cases.
+39 tests across 12 test classes verifying that each rule fires as designed on synthetic data. Each test constructs a minimal dataset targeting exactly one rule (or a specific guard condition). Covers QR1, QR2, QR4, MED1, RC1 (both injected and organic), CAT1, LOW1, LOW2, LOW3, SR3, HR6, HR1/HR3 (injected), PUB1/SEC1/REG1 (context-aware), rule priority ordering, dominance guard, and metric-filter edge cases. (DYN_CAT/CAT2 tests removed in Spec 19 Phase 2.)
 
 Key findings during builder construction (2026-04-20):
 - **RC1 now fires organically** for small-to-medium datasets (RC2/RC3/RC4 deleted in Spec 19 Phase 2 — structurally unreachable). Spec 07 added lazy `var_priority` computation to `build_data_features()` — for datasets up to 10,000 rows with ≤8 QIs, per-QI risk contribution is computed via leave-one-out reid_95 and the resulting `var_priority` populates `features['var_priority']` and `features['risk_concentration']`. For larger datasets, the performance guard skips the computation and RC1 remains dormant — the engine then falls through to QR/LOW rules.
 - **HR1-HR5 remain dormant** — they depend on `uniqueness_rate` which is not populated in the feature pipeline. Tests for HR1-HR5 inject the feature manually via feature-injection (see `TestUniquenessRiskRules` in the known-case suite).
-- **DYN_CAT_Pipeline preempts CAT2.** The pipeline_rules check fires before rule_factories, so `CAT2_Mixed_Categorical_Majority` is unreachable when `DYN_CAT_Pipeline` has the same condition.
+- **DYN_CAT and CAT2 deleted** in Spec 19 Phase 2 — self-contradictory (gated to l_diversity but used NOISE, blocked for l_diversity).
 - **QR0 (GENERALIZE_FIRST) ~~is skipped under reid95~~.** Pre-Fix 0 data — `GENERALIZE_FIRST` was missing from `METRIC_ALLOWED_METHODS` for all metrics, so QR0 was silently config-blocked. Fixed 2026-04-20: GENERALIZE and GENERALIZE_FIRST added to all 4 metric lists. See `tests/empirical/fixtures/README.md` Change History.
 
 Run: `python -m pytest tests/test_rule_selection_known_cases.py -v` (~1.5s, no R/sdcMicro required).

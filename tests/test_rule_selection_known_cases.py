@@ -202,11 +202,15 @@ class TestRiskConcentrationRules:
 
 
 # ════════════════════════════════════════════════════════════════════════
-# Categorical-aware rules (CAT1, DYN_CAT)
+# Categorical-aware rules (CAT1)
 # ════════════════════════════════════════════════════════════════════════
 
 class TestCategoricalAwareRules:
-    """CAT1, DYN_CAT pipeline, and the dominance guard."""
+    """CAT1 and the dominance guard.
+
+    DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory
+    (gated to l_diversity but used NOISE, blocked for l_diversity).
+    """
 
     def test_cat1_gated_for_reid95(self):
         """CAT1 must NOT fire when risk_metric is reid95 (default).
@@ -241,22 +245,8 @@ class TestCategoricalAwareRules:
         assert 'CAT1' not in suite['rule_applied'], \
             f"CAT1 should be blocked by dominance guard; got {suite['rule_applied']}"
 
-    def test_dyn_cat_pipeline_gated_for_reid95(self):
-        """DYN_CAT pipeline must NOT fire when risk_metric is reid95."""
-        df, qis, _ = build_cat2_dataset()
-        suite, features = get_suite(df, qis)
-        assert suite['rule_applied'] != 'DYN_CAT_Pipeline', \
-            f"DYN_CAT_Pipeline should be gated for reid95; got {suite['rule_applied']}"
-
-    def test_dyn_cat_pipeline_blocked_for_l_diversity_by_noise(self):
-        """DYN_CAT pipeline is [NOISE, PRAM] — NOISE blocked for l_diversity metric."""
-        df, qis, _ = build_cat2_dataset()
-        suite, features = get_suite(
-            df, qis, feature_overrides={'_risk_metric_type': 'l_diversity'})
-        # NOISE is not in METRIC_ALLOWED_METHODS['l_diversity'], so the
-        # pipeline is rejected by _all_allowed even though PRAM is allowed.
-        assert suite['rule_applied'] != 'DYN_CAT_Pipeline', \
-            f"DYN_CAT_Pipeline should be blocked (NOISE not allowed for l_diversity)"
+    # DYN_CAT tests removed — rule deleted in Spec 19 Phase 2.
+    # (Self-contradictory: gated to l_diversity, pipeline used NOISE.)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -396,15 +386,7 @@ class TestRulePriority:
         assert 'CAT1' in suite['rule_applied'], \
             f"CAT1 should fire before reid_risk rules, got {suite['rule_applied']}"
 
-    def test_dyn_cat_pipeline_gated_and_cat2_also_gated_for_reid95(self):
-        """Both DYN_CAT and CAT2 gated for reid95 — falls through to other rules."""
-        df, qis, _ = build_cat2_dataset()
-        suite, features = get_suite(df, qis)
-        # DYN_CAT uses PRAM, CAT2 uses PRAM — both gated for reid95
-        assert 'DYN_CAT' not in suite['rule_applied'], \
-            f"DYN_CAT should be gated for reid95, got {suite['rule_applied']}"
-        assert 'CAT2' not in suite['rule_applied'], \
-            f"CAT2 should be gated for reid95, got {suite['rule_applied']}"
+    # DYN_CAT/CAT2 combined test removed — both rules deleted in Spec 19 Phase 2.
 
 
 # ════════════════════════════════════════════════════════════════════════

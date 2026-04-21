@@ -103,30 +103,8 @@ def _patch_cat1_ratio(value: float):
                 'utility_fallback': None,
             }
 
-        # CAT2 unchanged — delegate to original (CAT2 has its own gate)
-        if 0.50 < cat_ratio < value and n_cont >= 1 and 0.15 <= reid_95 <= 0.50:
-            # Build CAT2 result directly too, to avoid original re-checking CAT1
-            p = 0.30 if reid_95 > 0.35 else 0.25
-            mag = 0.20 if reid_95 > 0.35 else 0.15
-            from sdc_engine.sdc.selection.rules import top_categorical_qis
-            return {
-                'applies': True,
-                'rule': 'CAT2_Mixed_Categorical_Majority',
-                'use_pipeline': True,
-                'pipeline': ['NOISE', 'PRAM'],
-                'parameters': {
-                    'NOISE': {'variables': features['continuous_vars'], 'magnitude': mag},
-                    'PRAM': {'variables': top_categorical_qis(features), 'p_change': p},
-                },
-                'reason': f"Mixed types at moderate risk (ReID95={reid_95:.1%})",
-                'confidence': 'MEDIUM',
-                'priority': 'RECOMMENDED',
-                'reid_fallback': {
-                    'method': 'kANON',
-                    'parameters': {'quasi_identifiers': qis, 'k': 5, 'strategy': 'hybrid'},
-                },
-                'utility_fallback': None,
-            }
+        # CAT2 deleted in Spec 19 Phase 2 — self-contradictory
+        # (gated to l_diversity, pipeline used NOISE, blocked for l_diversity).
 
         return {'applies': False}
 

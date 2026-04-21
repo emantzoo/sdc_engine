@@ -162,12 +162,13 @@ def build_cat1_blocked_by_dominance() -> Tuple[pd.DataFrame, List[str], List[str
 
 
 def build_cat2_dataset() -> Tuple[pd.DataFrame, List[str], List[str]]:
-    """Triggers DYN_CAT_Pipeline (dynamic categorical pipeline).
-    Verified: cat_ratio=0.67, reid_95=0.250, rule=DYN_CAT_Pipeline.
+    """Mixed categorical/continuous dataset (formerly DYN_CAT/CAT2 trigger).
 
-    DYN_CAT_Pipeline fires from pipeline_rules before CAT2 in rule_factories.
-    Same condition: 0.50 < cat_ratio < 0.70, reid_95 > 0.15, n_cont >= 1.
-    Strategy: 2 cat + 1 cont (cat_ratio=0.67), n=800 for reid_95 ~0.25.
+    DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory
+    (gated to l_diversity, pipeline used NOISE which is blocked for
+    l_diversity).  Builder retained for existing tests that use it.
+
+    Shape: 2 cat + 1 cont (cat_ratio=0.67), n=800.
     """
     rng = _rng()
     n = 800

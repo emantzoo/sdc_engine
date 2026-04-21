@@ -515,13 +515,13 @@ This is the most important distinction in SDC:
 
 The rules engine evaluates rules in priority order — **first match wins**. At a high level:
 
-1. **Pipelines** checked first (dynamic builder or legacy CAT2†/P4/P5)
+1. **Pipelines** checked first (dynamic builder or legacy P4/P5)
 2. **Small dataset guard** (HR6: <200 rows → LOCSUPR k=3)
 3. **Structural rules** (SR3: near-unique QI with few QIs)
 4. **Risk concentration rule** (RC1) — when per-QI risk data is available and ReID95 >15%
 5. **Categorical / temporal / diversity rules** (CAT1†, LDIV1, DATE1)
 
-> † CAT1, CAT2, and DYN_CAT are **metric-gated**: they only fire when the active metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness).
+> CAT1 is **metric-gated**: it only fires when the active metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). (DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory.)
 6. **ReID-based rules** (QR0–QR4, MED1) — risk pattern drives method and k/p selection
 7. **Low-risk rules** (LOW1–LOW3) — type-based when ReID95 ≤20%
 8. **Distribution rules** (DP1–DP4) — outliers, skew, sensitive attributes, integer-coded categoricals
@@ -542,7 +542,7 @@ The key principle: **ReID95 determines whether a structural method (kANON, LOCSU
 
 When data characteristics indicate that no single method is sufficient, the system recommends a **pipeline** — applying methods in sequence. Pipeline rules are checked before single-method rules.
 
-Most pipelines are now assembled dynamically based on data features (e.g., continuous outliers → add NOISE, high ReID → add kANON, categorical-dominant → defer to PRAM rules, multi-level geographic → GENERALIZE + kANON). The dynamic builder includes a categorical guard (≥70% categorical defers to CAT1, 50–70% builds DYN_CAT with NOISE+PRAM) and a geographic guard (GEO1 for multi-level geo QIs). Legacy pipelines P4a/P4b and P5 handle skewed+sensitive and sparse mixed dataset edge cases.
+Most pipelines are now assembled dynamically based on data features (e.g., continuous outliers → add NOISE, high ReID → add kANON, categorical-dominant → defer to PRAM rules, multi-level geographic → GENERALIZE + kANON). The dynamic builder includes a categorical guard (≥70% categorical defers to CAT1) and a geographic guard (GEO1 for multi-level geo QIs). Legacy pipelines P4a/P4b and P5 handle skewed+sensitive and sparse mixed dataset edge cases.
 
 > For the full pipeline rule table, dynamic builder logic, triggers, and method parameters, see [Appendix §3 — Method Selection Rules](#3-method-selection-rules).
 
@@ -1269,7 +1269,7 @@ Then constrained by complexity and risk:
 
 ##### Method Selection (Preprocessing Quick-Test)
 
-This is a **simplified** method picker used for the preprocessing tier loop's quick protection test — it checks whether the target ReID is achievable after each preprocessing tier. It is **not** the final method selection. The full rules engine (`select_method.py` — RC1, CAT1-CAT2, QR0-QR4, etc.) is used for the actual Protection phase and considers risk patterns, data type composition, structural risk, and treatment levels. The two are complementary: the preprocessing retry varies preprocessing intensity while keeping the method constant; the rules engine picks the optimal method after preprocessing is complete.
+This is a **simplified** method picker used for the preprocessing tier loop's quick protection test — it checks whether the target ReID is achievable after each preprocessing tier. It is **not** the final method selection. The full rules engine (`select_method.py` — RC1, CAT1, QR0-QR4, etc.) is used for the actual Protection phase and considers risk patterns, data type composition, structural risk, and treatment levels. The two are complementary: the preprocessing retry varies preprocessing intensity while keeping the method constant; the rules engine picks the optimal method after preprocessing is complete.
 
 | Condition | Method | Parameters | Rationale |
 |-----------|--------|------------|-----------|
@@ -2210,7 +2210,7 @@ The loop is group-based (not record-by-record, for speed):
 
 **Escalation schedule:** k = 3 → 5 → 7 → 10 → 15 → 20. Subject to k-pruning and smart start.
 
-**In pipelines:** Dynamic pipeline (tail cleanup — only when kANON absent, k=3; or k=7 for very high risk with kANON present), DYN_CAT (tail cleanup, k=3).
+**In pipelines:** Dynamic pipeline (tail cleanup — only when kANON absent, k=3; or k=7 for very high risk with kANON present).
 
 **Fallback order:** kANON → PRAM → NOISE.
 
@@ -2228,7 +2228,7 @@ Perturbation method for categorical data. Swaps category values with controlled 
 
 **Escalation schedule:** p_change = 0.10 → 0.15 → 0.20 → 0.25 → 0.30 → 0.35 → 0.40 → 0.50.
 
-**In pipelines:** DYN_CAT (2nd, after NOISE, p_change=0.25–0.30), CAT2 (2nd, after NOISE, p_change=0.25–0.30), P4b (2nd, after kANON, p_change=0.20 — targets **sensitive columns**), P5 (2nd, after NOISE, p_change=0.30).
+**In pipelines:** P4b (2nd, after kANON, p_change=0.20 — targets **sensitive columns**), P5 (2nd, after NOISE, p_change=0.30).
 
 **Fallback order:** kANON → LOCSUPR → NOISE.
 
@@ -2244,7 +2244,7 @@ Perturbation method for numeric data. Adds calibrated random noise to continuous
 
 **Escalation schedule:** magnitude = 0.05 → 0.10 → 0.15 → 0.20 → 0.25 → 0.30 → 0.40 → 0.50.
 
-**In pipelines:** Dynamic pipeline (1st step when kANON not selected, magnitude=0.15–0.20), DYN_CAT (1st, magnitude=0.15–0.20), CAT2 (1st, magnitude=0.15–0.20), P5 (1st, magnitude=0.10–0.25 scaled by uniqueness).
+**In pipelines:** Dynamic pipeline (1st step when kANON not selected, magnitude=0.15–0.20), P5 (1st, magnitude=0.10–0.25 scaled by uniqueness).
 
 **Fallback order:** kANON → PRAM → LOCSUPR.
 
@@ -2357,7 +2357,7 @@ Pipelines run two or more methods sequentially when single methods are demonstra
 
 **Dynamic Pipeline Builder** — Assembles pipelines from data features rather than matching hardcoded patterns. Triggers when ReID95 >15% and mixed types benefit from multi-method treatment:
 
-1. **Categorical guard** — If ≥70% categorical and metric is `l_diversity`, defers to CAT1 (PRAM). If 50–70% categorical with ≥1 continuous and metric is `l_diversity`, builds DYN_CAT variant (NOISE + PRAM + optional LOCSUPR tail). Skipped when metric is reid_95/k_anonymity/uniqueness (PRAM invalidates these metrics).
+1. **Categorical guard** — If ≥70% categorical and metric is `l_diversity`, defers to CAT1 (PRAM). Skipped when metric is reid_95/k_anonymity/uniqueness (PRAM invalidates these metrics). (DYN_CAT — the 50–70% categorical variant — was deleted in Spec 19 Phase 2.)
 2. **GEO1** — If 2+ geographic QIs with both fine-grained (>50 unique) and coarse (≤50 unique), uses GENERALIZE (fine geos) → kANON.
 3. **kANON** added when ReID95 >20% (k=7 if ReID95 >40%, else k=5; strategy='hybrid')
 4. **NOISE** added when continuous QIs have outliers **and** kANON was not already added (magnitude scaled by risk level)
@@ -2369,7 +2369,6 @@ Note: kANON and NOISE are mutually exclusive in the dynamic builder — if kANON
 
 | Pipeline | Trigger | Method Sequence | Rationale |
 |----------|---------|-----------------|-----------|
-| **CAT2** | **l_diversity metric** + 50–70% categorical + ReID95 15–50% + ≥1 continuous | NOISE → PRAM | Split: numerics get noise, categoricals get perturbation. Parameters scale with risk (p_change 0.25–0.30, magnitude 0.15–0.20). Metric-gated: skipped for reid_95/k_anonymity/uniqueness. |
 | **P4b** | ≥2 skewed columns + sensitive attributes (diversity ≤10) + ≥2 QIs | kANON → PRAM | Structure for QIs, PRAM targets **sensitive columns** (not skewed QIs) |
 | **P4a** | ≥2 skewed columns + sensitive attributes (diversity >10) + ≥2 QIs | kANON only | High-diversity sensitive cols — no PRAM (would target wrong columns) |
 | **P5** | Density <5 (records/QI-space) + ≥200 rows + uniqueness >15% + ≥2 continuous + ≥2 categorical | NOISE → PRAM | Sparse mixed dataset — NOISE magnitude scaled by uniqueness (0.10–0.25). Datasets <200 rows deferred to HR6. |

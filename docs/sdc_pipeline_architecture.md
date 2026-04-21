@@ -48,7 +48,7 @@ flowchart TD
 
         subgraph RULES["Rule Chain — Priority Order"]
             direction TB
-            R1["Pipeline rules\nDYN · DYN_CAT · GEO1 · CAT2 · P4a/b · P5"]
+            R1["Pipeline rules\nDYN · GEO1 · P4a/b · P5"]
             R2["Small dataset guard\nHR6 &lt;200 rows → LOCSUPR k=3"]
             R3["Structural risk\nSR3 near-unique QI"]
             R4["Risk concentration\nRC1 when var_priority available"]
@@ -211,13 +211,13 @@ evaluates rules in strict priority order — **first match wins**:
 
 | Priority | Group | Rules | Trigger |
 |---|---|---|---|
-| 1 | **Pipelines** | DYN, DYN_CAT†, GEO1, CAT2†, P4a, P4b, P5 | Multi-method needed; checked before all single-method rules |
+| 1 | **Pipelines** | DYN, GEO1, P4a, P4b, P5 | Multi-method needed; checked before all single-method rules |
 | 2 | **Small dataset** | HR6 | <200 rows — structural constraint |
 | 3 | **Near-unique** | SR3 | ≤2 QIs + max uniqueness >70% |
 | 4 | **Risk concentration** | RC1 | var_priority available + ReID95 >15% |
 | 5 | **Type/diversity** | CAT1†, LDIV1+DATE1, DP4 | Categorical dominant, l-diversity gap, temporal dominant, integer-coded |
 
-> † **Metric-gated:** CAT1, CAT2, and DYN_CAT only fire when the active risk metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). When gated out, the engine falls through to QR/MED/LOW rules.
+> **Metric-gated:** CAT1 only fires when the active risk metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). When gated out, the engine falls through to QR/MED/LOW rules. (DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory.)
 | 6 | **ReID pattern** | QR0–QR4, MED1, MED1-high-supp | Risk distribution shape drives k/p |
 | 7 | **Low risk** | LOW1–LOW3 | ReID95 ≤20%, type-based |
 | 8 | **Distribution** | DP1–DP3 | Outliers, skewness, sensitive attributes |
@@ -279,8 +279,8 @@ The dynamic builder assembles pipelines from data features rather than matching 
 patterns:
 
 1. **Categorical guard** — ≥70% categorical: defer to CAT1 (PRAM, l_diversity metric only).
-   50–70% categorical with ≥1 continuous: build DYN_CAT (NOISE → PRAM, l_diversity metric
-   only). When metric is reid_95/k_anonymity/uniqueness, the categorical guard is skipped.
+   When metric is reid_95/k_anonymity/uniqueness, the categorical guard is skipped.
+   (DYN_CAT — the 50–70% categorical variant — was deleted in Spec 19 Phase 2.)
 2. **GEO1** — 2+ geographic QIs with both fine-grained and coarse levels:
    GENERALIZE (fine geos) → kANON.
 3. **kANON step** — added when ReID95 >20% (k=7 if >40%, else k=5, strategy=hybrid).
@@ -289,7 +289,7 @@ patterns:
 5. **LOCSUPR tail** — added when kANON is absent and high_risk_rate >15% (k=3); or when
    kANON is present but high_risk_rate >30% and estimated suppression at k=7 <40% (k=7).
 
-Legacy pipelines (CAT2, P4a, P4b, P5) cover edge cases not handled by the dynamic builder.
+Legacy pipelines (P4a, P4b, P5) cover edge cases not handled by the dynamic builder.
 
 **Treatment balance** is applied to both single-method and pipeline output before the retry
 engine starts. ≥60% Heavy bumps k +2 (or p/magnitude +0.05). ≥60% Light reduces k -1

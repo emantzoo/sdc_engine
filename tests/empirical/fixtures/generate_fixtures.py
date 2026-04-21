@@ -9,11 +9,11 @@ explicitly creating QI value combinations and assigning controlled
 equivalence-class sizes. This guarantees exact reid_95, high_risk_rate,
 feasibility, and other metrics needed to trigger each rule.
 
-Findings (pre-Fix 0): DYN_CAT_Pipeline and CAT2_Mixed_Categorical are
-unreachable -- both gated to l_diversity but use NOISE (blocked for
-l_diversity). GEO1 was also unreachable due to GENERALIZE missing from
+Findings (pre-Fix 0): GEO1 was unreachable due to GENERALIZE missing from
 METRIC_ALLOWED_METHODS (config bug, fixed 2026-04-20). Post-Fix 0,
-GEO1 fires correctly. DYN_CAT/CAT2 remain unreachable (design question).
+GEO1 fires correctly. DYN_CAT and CAT2 were self-contradictory (gated to
+l_diversity but used NOISE, blocked for l_diversity) — deleted in Spec 19
+Phase 2.
 """
 import sys
 from pathlib import Path
@@ -43,7 +43,7 @@ def g1_ldiv1():
     - Pipeline rules (P5 is the risk): needs density>=5 OR n_cont<2 OR n_cat<2
     - RC rules: need N>10000 (no var_priority) OR reid<=0.15
     - MED1: need reid<=0.20 or avoid moderate pattern
-    - CAT1/CAT2: only fire for l_diversity metric (we use reid95)
+    - CAT1: only fires for l_diversity metric (we use reid95)
 
     Strategy: 4 cat + 1 cont. cat_ratio=4/5=0.80 (>=0.70 -> cat-dominant guard
     blocks DYN builder, and P5 requires n_cont>=2 which fails with 1 cont).
@@ -105,10 +105,9 @@ def g2_geo1():
 
     Fix: Add a continuous QI to bring cat_ratio < 0.70.
     With city(cat) + region(cat) + income(cont): cat_ratio = 2/3 = 0.67 < 0.70.
-    But then DYN_CAT might fire (0.50<0.67<0.70 AND l_diversity).
-    Under reid95 metric, DYN_CAT won't fire (needs l_diversity).
-    And 0.50<cat_ratio<0.70 enters DYN_CAT check... but metric gate blocks it.
-    So GEO1 check (line 111) is reached. Good.
+    DYN_CAT was deleted in Spec 19 Phase 2 (self-contradictory), so
+    the 0.50<cat_ratio<0.70 range no longer has a pipeline intercept.
+    GEO1 check is reached directly. Good.
 
     Combo: 60 * 10 * 22 = 13200. Need N large enough for feasibility.
     N=50000. eq = 50000/13200 = 3.8. hard. NOT infeasible.

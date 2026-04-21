@@ -55,20 +55,21 @@ no log, no error, just fallthrough.
 ### G7 redesign (2 iterations)
 
 G7 was originally aimed at CAT2_Mixed_Categorical_Majority (`['NOISE', 'PRAM']`
-pipeline under l_diversity). CAT2 is gated to l_diversity metric, but NOISE is
-blocked for l_diversity. The pipeline always matches then gets rejected.
+pipeline under l_diversity). CAT2 was gated to l_diversity metric, but NOISE is
+blocked for l_diversity. The pipeline always matched then got rejected.
+Both DYN_CAT and CAT2 were deleted in Spec 19 Phase 2.
 
 **Iteration 1:** CAT2 found unreachable (same NOISE/l_diversity contradiction
 as DYN_CAT). Retargeted to LOW2_Continuous_Noise.
 
-**Iteration 2:** Passed verification. No further changes after Fix 0 (GENERALIZE
-fix doesn't affect CAT2's NOISE issue).
+**Iteration 2:** Passed verification.
 
 ### Stale files removed
 
-- `fixture_g1_dyn_cat.csv` — from pre-retargeting iteration (DYN_CAT found
-  unreachable: gated to l_diversity, uses NOISE, NOISE blocked for l_diversity)
-- `fixture_g7_cat2.csv` — from pre-retargeting iteration (CAT2 same issue)
+- `fixture_g1_dyn_cat.csv` — from pre-retargeting iteration (DYN_CAT was
+  self-contradictory, deleted in Spec 19 Phase 2)
+- `fixture_g7_cat2.csv` — from pre-retargeting iteration (CAT2 same issue,
+  deleted in Spec 19 Phase 2)
 
 ## Change history
 
@@ -137,12 +138,12 @@ All fixtures use SCIENTIFIC tier. These rules need different tiers:
 | SEC1_Secure (2 variants) | SECURE | 0.05 < reid <= 0.25, PRAM/NOISE |
 | REG1_Regulatory (2 variants) | PUBLIC + reid_target=0.03 | Regulatory compliance |
 
-### Category D: Self-contradictory (design questions for Spec 16)
+### Category D: Self-contradictory — deleted in Spec 19 Phase 2
 
-| Rule | Issue | Notes |
+| Rule | Issue | Resolution |
 |---|---|---|
-| DYN_CAT_Pipeline | Gated to l_diversity, uses NOISE (blocked for l_diversity) | NOISE→PRAM pipeline may be valid as a whole |
-| CAT2_Mixed_Categorical | Same: l_diversity gate + NOISE in pipeline | Same design question |
+| DYN_CAT_Pipeline | Gated to l_diversity, used NOISE (blocked for l_diversity) | Deleted — self-contradictory by construction |
+| CAT2_Mixed_Categorical | Same: l_diversity gate + NOISE in pipeline | Deleted — same contradiction |
 
 ### Category E: Deleted — previously preempted-always
 
