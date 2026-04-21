@@ -278,26 +278,15 @@ def build_data_features(
         except Exception:
             pass
 
-    # Risk pattern classification
+    # Risk pattern classification — single canonical classifier
+    # (Spec 19 Task 3c: unified from dual inline/reid.py classifiers)
+    from sdc_engine.sdc.metrics.reid import classify_risk_pattern
     reid_50 = reid.get('reid_50', 0)
     reid_95 = reid.get('reid_95', 0)
     reid_99 = reid.get('reid_99', 0)
     mean_risk = reid.get('mean_risk', reid_50)
 
-    if reid_50 >= 0.20 and (reid_99 - reid_50) < 0.10:
-        risk_pattern = 'uniform_high'
-    elif reid_50 >= 0.20:
-        risk_pattern = 'widespread'
-    elif reid_50 < 0.05 and reid_95 >= 0.30 and reid_99 >= 0.50:
-        risk_pattern = 'severe_tail'
-    elif reid_50 < 0.05 and reid_95 >= 0.30:
-        risk_pattern = 'tail'
-    elif abs(mean_risk - reid_50) > 0.15:
-        risk_pattern = 'bimodal'
-    elif reid_50 < 0.05 and reid_95 < 0.30:
-        risk_pattern = 'uniform_low'
-    else:
-        risk_pattern = 'moderate'
+    risk_pattern = classify_risk_pattern(reid)
 
     # Fraction of records with individual risk > 20%, computed from
     # equivalence class sizes: risk(record) ≈ 1/eq_size.

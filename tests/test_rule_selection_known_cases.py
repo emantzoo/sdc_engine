@@ -57,34 +57,20 @@ from tests.fixtures.rule_test_builders import (
 # ════════════════════════════════════════════════════════════════════════
 
 def _build_test_features(df, qis):
-    """Build features for testing with one remaining overlay adjustment.
+    """Build features for testing — thin wrapper around build_data_features.
 
-    Divergence 1 (continuous/categorical scope) resolved: builders now
-    produce datasets with genuinely continuous QIs (>20 unique numeric
-    values) so build_data_features QI-only scope matches test intent.
+    All three historical overlays have been resolved:
+    1. continuous/categorical scope: builders use genuinely continuous QIs
+    2. risk_pattern: production now delegates to classify_risk_pattern()
+    3. uniqueness_rate: tests accept production's QI-combo semantics
 
-    Divergence 3 (uniqueness_rate) resolved: tests now accept production's
-    QI-combo uniqueness semantics.
-
-    One remaining overlay (will be removed in Task 3c):
-    2. risk_pattern: production inline classifier vs metrics.reid classifier
+    Only remaining adjustment: strip var_priority so RC rules stay
+    dormant by default in tests that don't need them.
     """
-    from sdc_engine.sdc.metrics.reid import classify_risk_pattern
     features = build_data_features(df, qis)
     # Strip auto-computed var_priority so RC rules stay dormant by default.
     features.pop('var_priority', None)
     features.pop('risk_concentration', None)
-    # 2. Overlay canonical risk_pattern from metrics.reid classifier
-    if features.get('has_reid'):
-        reid_metrics = {
-            'reid_50': features.get('reid_50', 0),
-            'reid_95': features.get('reid_95', 0),
-            'reid_99': features.get('reid_99', 0),
-            'mean_risk': features.get('mean_risk', 0),
-        }
-        pattern = classify_risk_pattern(reid_metrics)
-        features['risk_pattern'] = pattern
-        features['risk_level'] = pattern
     return features
 
 
