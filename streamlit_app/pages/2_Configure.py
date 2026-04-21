@@ -38,13 +38,13 @@ def _run_backward_elimination(data_typed):
             col = row["variable"]
             pct = row["risk_drop_pct"]
             if pct >= 15:
-                label = "\U0001f534 HIGH"
+                label = "HIGH"
             elif pct >= 8:
-                label = "\U0001f7e0 MED-HIGH"
+                label = "MED-HIGH"
             elif pct >= 3:
-                label = "\U0001f7e1 MODERATE"
+                label = "MODERATE"
             else:
-                label = "\u26aa LOW"
+                label = "LOW"
             var_priority[col] = (label, pct)
 
     return var_priority, rr.steps_df
