@@ -174,7 +174,7 @@ Below the role table:
 
 ### 3.5 Risk Preview
 
-- **Preview Risk** button — runs `calculate_reid()` on selected QIs and shows:
+- **Preview Risk** button — runs `calculate_reid()` and `diagnose_qis()` on selected QIs. All risk metrics below update only when this button is clicked (risk computation is expensive, so recomputation is lazy). If you change QI selection or treatment levels, click Preview Risk again to refresh. Shows:
   - Risk badge (color-coded: LOW, MODERATE, HIGH, VERY HIGH)
   - Metric cards: ReID 50th/95th/99th percentile, high-risk rate, min k (minimum k-anonymity level, derived from 1/max_risk)
   - **QI space feasibility** (Spec 17) — shows `expected_eq_size` (records per equivalence class) with a status badge:
