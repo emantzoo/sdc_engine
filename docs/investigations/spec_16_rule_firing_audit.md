@@ -156,11 +156,11 @@ whether it improves outcomes. Phase 2 would upgrade these to live/niche/redundan
 
 | Rule | Verdict | Rationale | Recommended follow-up |
 |---|---|---|---|
-| HR1 | **untriggered** | Requires has_reid=False. Harness always computes ReID. Uniqueness threshold (> 0.20) is inside range | Exercise with has_reid=False path. Defensive code, not dead |
-| HR2 | **untriggered** | Same has_reid=False dependency. Uniqueness > 0.10 inside range | Same |
-| HR3 | **untriggered** | Same. Uniqueness > 0.05 inside range | Same |
-| HR4 | **untriggered** | Requires has_reid=False AND n_records < 100. No dataset < 100 rows | Defensive code. Accept as edge-case |
-| HR5 | **untriggered** | Requires has_reid=False AND 100 ≤ n_records < 500. No dataset in this window | Same |
+| HR1 | **preempted (defensive)** | Requires has_reid=False. Harness always computes ReID. Uniqueness threshold (> 0.20) is inside range | **Closed (Spec 19 Phase 2.3).** Keep as defensive fallback for no-ReID path |
+| HR2 | **preempted (defensive)** | Same has_reid=False dependency. Uniqueness > 0.10 inside range | Same |
+| HR3 | **preempted (defensive)** | Same. Uniqueness > 0.05 inside range | Same |
+| HR4 | **preempted (defensive)** | Requires has_reid=False AND n_records < 100. No dataset < 100 rows | Same |
+| HR5 | **preempted (defensive)** | Requires has_reid=False AND 100 ≤ n_records < 500. No dataset in this window | Same |
 
 ### Default rules
 
@@ -253,7 +253,7 @@ preempt it for most reid_95 values.
 DP4 to its intended niche (low-risk integer-coded data) where QR-family
 rules don't preempt. Still untriggered on harness.
 
-### Finding 6: HR1-HR5 are untriggered due to has_reid=False gate
+### Finding 6: HR1-HR5 — formal close-out (Spec 19 Phase 2.3)
 
 All uniqueness_risk_rules require has_reid=False. The harness always computes
 ReID. These rules are defensive fallbacks for when ReID computation fails or
@@ -261,16 +261,23 @@ is skipped. The uniqueness thresholds themselves are inside range.
 
 **Evidence:** Phase 1b analysis.
 
-> **Correction (post-sweep):** Spec 15 Item 3 claimed HR1-HR5 were dormant
-> because `uniqueness_rate` was not populated. This was **incorrect**.
-> `build_data_features()` DOES populate `uniqueness_rate` (line 278).
-> HR1-HR5 are untriggered solely because `has_reid=True` in all harness
-> runs, and higher-priority rules (priority 11-12.5) fire first. See
-> `spec_18_feature_population_sweep.md` for the full correction.
+> **Correction history:**
+> 1. **Spec 15 Item 3** (original claim): HR1-HR5 dormant because
+>    `uniqueness_rate` not populated. **WRONG.**
+> 2. **Spec 18 sweep** (correction): `build_data_features()` DOES populate
+>    `uniqueness_rate` (line 278). HR1-HR5 untriggered because `has_reid=True`
+>    in all harness runs, and higher-priority rules fire first. See
+>    `spec_18_feature_population_sweep.md`.
+> 3. **Spec 19 Phase 2.3** (final verdict): **preempted — defensive fallback
+>    for the no-ReID path.** HR1-HR5 sit at priority 15 of 16 factories
+>    (only `default_rules` is lower). They fire only when `has_reid=False`,
+>    which is the path where ReID computation fails or is skipped. The
+>    harness always computes ReID, so they never fire in tests — but they
+>    are not unwired (Spec 18 sweep corrected this), not unreachable (the
+>    code path exists), and not redundant (SR3 and HR6 don't cover the
+>    no-ReID regime). All five rules kept as-is. No code changes.
 
-**Follow-up:** Accept as defensive code. No deletion needed — they serve
-a real purpose when ReID is unavailable. Could exercise with a
-has_reid=False test path in Phase 2.
+**Status:** Closed. No follow-up needed.
 
 ### Finding 7: Fix 0 unblocked three rules (config-blocked → live)
 
@@ -297,7 +304,7 @@ Based on this audit, Spec 18 should address:
 | 3 | Investigate CAT2 preemption | 1 rule | Likely preempted by pipeline rules. Delete if confirmed |
 | 4 | ~~Add temporal fixture for DATE1~~ **Done** | 1 rule | Threshold widened 0.80→0.50 (Spec 18 Item 3) |
 | 5 | ~~Decide on DP4~~ **Done** | 1 rule | Reid ceiling tightened 0.30→0.20 (Spec 18 Item 4) |
-| 6 | Accept HR1-HR5 as defensive | 5 rules | untriggered but valid. Document as fallback-only |
+| 6 | ~~Accept HR1-HR5 as defensive~~ **Closed (Spec 19 Phase 2.3)** | 5 rules | Verdict: preempted (defensive). All five kept as-is |
 | 7 | ~~Add fixture for SR3~~ **Done** | 1 rule | G10 fixture added, SR3 verified as niche (Spec 18 Item 5) |
 
 Items 1-3 are deletions/fixes (reduce dead code). Items 4-7 are
@@ -374,9 +381,10 @@ rule cannot fire without explicit injection.
 | **unwired** | **8** | **GEO1, P4a, P4b, DP3, LDIV1, SR3, DP4, DATE1** |
 | preempted-always | 3 | RC2, RC3, RC4 |
 | preempted | 1 | CAT2 |
+| **preempted (defensive)** | **5** | **HR1-HR5** (Spec 19 Phase 2.3 close-out) |
 | unreachable | 1 | DYN_CAT_Pipeline |
-| untriggered | 6 | HR1-HR5, HR6 |
-| **Total** | **37** | |
+| untriggered | 1 | HR6 |
+| **Total** | **38** | |
 
 ### Impact on Spec 18 follow-up table
 

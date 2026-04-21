@@ -154,6 +154,13 @@ spec.
 - Systematic check for rules with no `applies=True` test path
 - Stale G10/G2 injection cleanup in `verify_fixtures.py`
 - LDIV1 priority restructuring (supplementary vs primary) — design question
-- HR1–HR5 formal close-out (depend on `uniqueness_rate` which is not
-  populated in the feature pipeline)
+- HR1–HR5 formal close-out — **CLOSED (Spec 19 Phase 2.3).**
+  Original Spec 15 Item 3 claimed `uniqueness_rate` was not populated —
+  this was wrong. Spec 18 sweep corrected it: `build_data_features()`
+  populates `uniqueness_rate` (line 278). HR1–HR5 are untriggered solely
+  because `has_reid=True` in all harness runs and higher-priority rules
+  (priority 1–14) fire first. The code path exists (`has_reid=False`),
+  the rules are not unwired, not unreachable, and not redundant (SR3 and
+  HR6 don't cover the no-ReID regime). Final verdict: **preempted —
+  defensive fallback for the no-ReID path.** All five rules kept as-is.
 - RC1-infeasibility fix
