@@ -19,7 +19,7 @@ The workflow follows five phases:
 - **Smart Classification** -- dual-signal fusion of keyword matching and risk contribution analysis; supports English and Greek column names
 - **Risk Assessment** -- ReID percentile analysis (50th/95th/99th), k-anonymity checks, uniqueness rates, structural risk scoring
 - **6 Protection Methods** -- kANON, LOCSUPR, PRAM, NOISE, RANKSWAP, RECSWAP
-- **30+ Selection Rules** -- across 8 tiers (pipeline, data structure, ReID risk, low-risk, distribution, heuristic, default) with first-match-wins evaluation
+- **33 Selection Rules** -- across 15 rule factories (pipeline, context-aware, structural, ReID risk, low-risk, distribution, heuristic, default) with first-match-wins evaluation
 - **AI-Assisted Mode** -- optional LLM review of rules engine recommendations (Cerebras or OpenAI), with safety constraints preventing protection reduction
 - **Preprocessing Pipeline** -- adaptive generalization with tier escalation, top/bottom coding, rare category merging, type-aware routing (dates, ages, geographic codes, numerics)
 - **Retry Engine** -- automatic parameter escalation and method fallback when targets are not met
@@ -47,11 +47,11 @@ When R is not installed, pure-Python implementations run as fallbacks.
 Beyond wrapping sdcMicro, the following are original contributions:
 
 - **Rules-engine method selection** (`selection/rules.py` + `selection/pipelines.py`):
-  30+ named rules across 8 priority tiers with first-match-wins evaluation
+  33 named rules across 15 rule factories with first-match-wins evaluation
 - **Suppression-gated rule switching**: rules estimate suppression before
   committing to kANON and switch to LOCSUPR/PRAM when kANON would
   over-suppress
-- **Risk concentration routing (RC1--RC4)**: per-QI backward elimination
+- **Risk concentration routing (RC1)**: per-QI backward elimination
   to route based on which column drives risk
 - **Retry engine with escalation + cross-method starts**
   (`protection_engine.py`): parameter escalation, intelligent cross-method
@@ -185,7 +185,7 @@ sdc_engine/                  # Core library
       diagnose.py            #     Data diagnostics
       qi_handler.py          #     Per-QI treatment handler
     selection/               #   Rules engine, pipelines, fallback logic
-      rules.py               #     30+ named selection rules
+      rules.py               #     33 named selection rules
       pipelines.py           #     Multi-method pipeline orchestration
       features.py            #     Feature extraction for rule matching
 streamlit_app/               # Streamlit web UI
@@ -220,15 +220,16 @@ The Protect page offers four modes:
 
 The rules engine evaluates features in priority order (first match wins):
 
-1. **Pipeline rules** (P1-P6) -- multi-method combos for complex scenarios
-2. **Small dataset / structural risk rules** (HR6, SR3) -- special cases
-3. **Risk concentration rules** (RC1-RC4) -- based on backward elimination priorities
-4. **Categorical-aware rules** (CAT1-CAT2) -- PRAM for categorical-dominant data (l_diversity metric only)
-5. **Data structure rules** (DS4-DS7) -- variable types (continuous-only, categorical-only, correlated, mixed)
-6. **ReID risk rules** (QR1-QR10) -- risk pattern + severity tier
+1. **Pipeline rules** (DYN, GEO1, P5) -- multi-method combos for complex scenarios
+2. **Context-aware rules** (REG1, PUB1, SEC1) -- access tier gated
+3. **Small dataset / structural risk rules** (HR6, SR3) -- special cases
+4. **Risk concentration** (RC1) -- backward elimination identifies dominant QI
+5. **Categorical / diversity / temporal** (CAT1, LDIV1, DATE1) -- type-specific routing
+6. **ReID risk rules** (QR0-QR4, MED1) -- risk pattern + severity tier
 7. **Low-risk rules** (LOW1-LOW3) -- perturbation for already-safe data
-8. **Distribution rules** (DP1-DP3) -- outliers, skewness
-9. **Default rules** -- catch-all fallbacks
+8. **Distribution rules** (DP1-DP2) -- outliers, skewness
+9. **Heuristic fallbacks** (HR1-HR5) -- uniqueness-based when no ReID
+10. **Default rules** -- catch-all fallbacks
 
 Full specification: [Smart Rules Reference](docs/smart_rules_complete.md)
 
@@ -264,7 +265,7 @@ Full specification: [Smart Rules Reference](docs/smart_rules_complete.md)
 - **sdcMicro parity test suite** -- 8 tests verifying Python vs R equivalence, all passing
 - **Context-aware routing rules** (PUB1, SEC1, REG1) tied to access tier
 - **Lazy var_priority computation** activates RC rules on small-to-medium datasets without manual backward elimination
-- **246 regression tests** -- known-case suite (42), dtype fuzz (28), degenerate inputs (28), cross-metric matrix (97), parity (8), harness (10), integration (33)
+- **247 regression tests** -- known-case suite (45), dtype fuzz (28), degenerate inputs (28), cross-metric matrix (97), parity (8), harness (10), integration (33) (8 known failures in cross-metric deferred to Spec 20)
 - **Two latent bugs found by test infrastructure and fixed** -- kANON int32 merge crash on R-loaded data (dtype fuzz), NOISE single-row NaN std bypass (degenerate inputs)
 
 ### Ported from v2-generalized-pipeline

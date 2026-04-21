@@ -45,7 +45,7 @@ IF ReID95 > 5%:
 IF ReID95 ≤ 5%:
     → Data is already structurally safe
     → CAN use perturbation methods for added deniability + utility preservation
-    → Rules LR1-LR4 select based on variable types
+    → Rules LOW1-LOW3 select based on variable types
 ```
 
 ### Without ReID
@@ -205,41 +205,30 @@ If expected_eq_size < 3:
 
 ### Rule Priority (First Match Wins)
 
-Method selection follows this priority order:
+Method selection follows this priority order (after pipeline check):
 
-1. **Feasibility (QR0)** — K-anonymity feasibility check
-2. **Structural risk (SR3, HR1-HR6)** — Near-unique records, small datasets
-3. **Risk concentration (RC1)** — Backward elimination risk patterns
-4. **Categorical (CAT1)** — Categorical-dominant data (l_diversity metric only)
-5. **ReID risk (QR1-QR2)** — Severe/heavy tail risk
-6. **Low-risk (LOW1-LOW3)** — Already-safe data, perturbation for utility
-7. **Distribution (DP1-DP3)** — Outliers, skewness, sensitive columns
-8. **Special (LDIV1, DATE1)** — L-diversity, temporal-dominant
-9. **Default rules** — Final fallbacks
+1. **Context-aware (REG1, PUB1, SEC1)** — Access tier gated
+2. **Small dataset (HR6)** — <200 rows
+3. **Structural risk (SR3)** — Near-unique records, <=2 QIs
+4. **Risk concentration (RC1)** — Backward elimination, dominant QI
+5. **Categorical / diversity / temporal (CAT1, LDIV1, DATE1)** — Type-specific routing
+6. **ReID risk (QR0-QR4, MED1)** — Feasibility + risk pattern
+7. **Low-risk (LOW1-LOW3)** — Already-safe data, perturbation for utility
+8. **Distribution (DP1-DP2)** — Outliers, skewness
+9. **Heuristic fallbacks (HR1-HR5)** — Uniqueness-based when no ReID
+10. **Default rules** — Final fallbacks
 
-## Pipeline Rules (P1-P6)
+## Pipeline Rules
 
 Multi-method pipelines trigger when single methods are demonstrably insufficient:
 
 | Rule | Condition | Pipeline | Reason |
 |------|-----------|----------|--------|
-| **P1** | ≥2 continuous + ≥2 categorical + outliers + high cardinality | NOISE → kANON | Mixed variables with dual risk |
-| **P2a** | ReID_50 > 15% + ReID_99 > 70% + categorical-dominant | PRAM → LOCSUPR | Widespread + extreme tail |
-| **P2b** | 10% < ReID_95 < 25% + high_risk_rate > 15% | kANON → LOCSUPR | Moderate + high-risk subgroup |
-| **P3** | ≥3 high-cardinality QIs | kANON → LOCSUPR | Vast combination space |
-| **P4** | ≥2 skewed + sensitive attributes | kANON → PRAM | Skewed + rare + sensitive |
-| **P5** | Sparse data (density < 5), mixed types | NOISE → PRAM | Sparse mixed dataset |
+| **DYN** | ReID >15%, mixed types, outliers | kANON/NOISE/LOCSUPR | Dynamic multi-method |
+| **GEO1** | ≥2 geo QIs (fine + coarse granularity) | GENERALIZE → kANON k=5 | Geographic hierarchy |
+| **P5** | Sparse data (density < 5), mixed types, uniqueness >15% | NOISE → PRAM | Sparse mixed dataset |
 
-## Low-Risk Structure Rules (LR1-LR4)
-
-Applied **only** when ReID_95 ≤ 5% (data is already low risk). These select perturbation methods for utility preservation:
-
-| Rule | Condition | Method |
-|------|-----------|--------|
-| **LR1** | Continuous-only + outliers | NOISE |
-| **LR2** | Continuous-only | NOISE |
-| **LR3** | Categorical-only | PRAM |
-| **LR4** | Categorical-dominant mixed | PRAM |
+> P1-P4 and P6 were deleted in Spec 19 Phase 2 (crash bugs, no real-data coverage, or preempted by single-method rules).
 
 ## SDC Engine Integration: Importance Weights for LOCSUPR
 
@@ -352,10 +341,10 @@ METHOD_INFO['LOCSUPR']
 | Module | Key Functions | Role |
 |--------|---------------|------|
 | `sdc/selection/pipelines.py` | `pipeline_rules()`, `select_method_suite()` | Pipeline + orchestration |
-| `sdc/selection/rules.py` | `reid_risk_rules()`, `data_structure_rules()`, `low_risk_structure_rules()`, `distribution_rules()`, `default_rules()` | Individual rule sets |
-| `sdc/selection/features.py` | `extract_data_features_with_reid()` | Feature extraction (legacy imports) |
+| `sdc/selection/rules.py` | `reid_risk_rules()`, `risk_concentration_rules()`, `low_risk_rules()`, `distribution_rules()`, `default_rules()` | Individual rule sets |
+| `sdc/protection_engine.py` | `build_data_features()` | Canonical feature extraction |
 | `sdc/config.py` | `PROTECTION_THRESHOLDS`, `METHOD_INFO` | Configuration constants |
-| `sdc/metrics/reid.py` | `calculate_reid()`, `classify_risk_pattern()` | ReID metrics |
+| `sdc/metrics/reid.py` | `calculate_reid()`, `classify_risk_pattern()` | ReID metrics + risk pattern classification |
 | `sdc/LOCSUPR.py` | `apply_locsupr(importance_weights=...)` | Local suppression with weights |
 
 ## See Also

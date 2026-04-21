@@ -415,14 +415,12 @@ flowchart TD
     START[Preprocessed Data<br/>+ Features Dict] --> PIPE{Pipeline rules<br/>match?}
     
     PIPE -->|GEO1| PIPE_GEO["GENERALIZE → kANON k=5<br/>≥2 geo QIs, fine+coarse"]
-    PIPE -->|DYN| PIPE_DYN["kANON/NOISE/LOCSUPR<br/>ReID>20%, mixed, outliers"]
-    PIPE -->|P4| PIPE_P4["kANON ± PRAM<br/>≥2 skewed + sensitive"]
+    PIPE -->|DYN| PIPE_DYN["kANON/NOISE/LOCSUPR<br/>ReID>15%, mixed, outliers"]
     PIPE -->|P5| PIPE_P5["NOISE → PRAM<br/>Sparse density<5, mixed, unique>15%"]
     PIPE -->|no match| RULES
 
     PIPE_GEO --> ENGINE[Retry Engine]
     PIPE_DYN --> ENGINE
-    PIPE_P4 --> ENGINE
     PIPE_P5 --> ENGINE
     
     subgraph RULES["Single-Method Rule Chain (first match wins)"]
@@ -453,9 +451,10 @@ flowchart TD
 | Pipeline | Trigger | Methods |
 |---|---|---|
 | GEO1 | ≥2 geo QIs (fine + coarse granularity) | GENERALIZE → kANON k=5 |
-| DYN | ReID > 20%, mixed types, outliers | kANON / NOISE / LOCSUPR |
-| P4 | ≥2 skewed + sensitive columns | kANON (± PRAM on sensitive) |
+| DYN | ReID > 15%, mixed types, outliers | kANON / NOISE / LOCSUPR |
 | P5 | Sparse data (density < 5), mixed types, uniqueness > 15% | NOISE → PRAM |
+
+> P4a/P4b deleted in Spec 19 Phase 2 (crash bug + no real-data coverage).
 
 #### Structural Risk Rules (SR)
 
@@ -483,7 +482,7 @@ Gate: `reid_95 > 0.15` AND `var_priority` exists.
 
 RC2, RC3, and RC4 were deleted in Spec 19 Phase 2 (preempted-always by RC1). The `_compute_var_priority` contribution metric produces non-normalized percentages where every QI shows ≥50% contribution, making `top_pct >= 40%` structurally unavoidable. See `docs/investigations/spec_16_readiness_rc_family_preemption.md`.
 
-**Activation status (as of 2026-04):** RC1 fires organically on datasets ≤10k rows and ≤8 QIs (performance guard from `config.py:VAR_PRIORITY_COMPUTATION`). HR1-HR5 remain dormant pending `uniqueness_rate` population in the feature pipeline — they are unit-tested via feature injection (see `tests/test_rule_selection_known_cases.py::TestUniquenessRiskRules`).
+**Activation status (as of 2026-04):** RC1 fires organically on datasets ≤10k rows and ≤8 QIs (performance guard from `config.py:VAR_PRIORITY_COMPUTATION`). RC1 includes an infeasibility gate: when `k_anonymity_feasibility == 'infeasible'`, RC1 defers to QR0 (GENERALIZE_FIRST) — added in Spec 19 Phase 2.3 to fix a production regression from Spec 18. HR1-HR5 remain dormant pending `uniqueness_rate` population in the feature pipeline — they are unit-tested via feature injection (see `tests/test_rule_selection_known_cases.py::TestUniquenessRiskRules`).
 
 #### Context-Aware Rules (Access Tier Gated)
 

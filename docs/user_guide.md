@@ -2406,7 +2406,7 @@ The retry loop in `run_rules_engine_protection()`:
 
 #### 4.4 Suppression Estimation
 
-Both `extract_data_features_with_reid()` and `build_data_features()` compute `estimated_suppression` — a dict mapping k values (3, 5, 7) to the fraction of records in equivalence classes smaller than that k. Computed from a single groupby pass. QR2 uses the k=7 estimate when deciding whether to switch from kANON k=7 to LOCSUPR (threshold: 25% suppression). CAT1 reports the k=5 estimate in its reasoning. The legacy key `estimated_suppression_k5` is preserved for backward compatibility.
+`build_data_features()` computes `estimated_suppression` — a dict mapping k values (3, 5, 7) to the fraction of records in equivalence classes smaller than that k. Computed from a single groupby pass. QR2 uses the k=7 estimate when deciding whether to switch from kANON k=7 to LOCSUPR (threshold: 25% suppression). CAT1 reports the k=5 estimate in its reasoning. The legacy key `estimated_suppression_k5` is preserved for backward compatibility.
 
 #### 4.5 Post-Protection
 
