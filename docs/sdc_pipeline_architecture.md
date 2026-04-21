@@ -220,9 +220,8 @@ evaluates rules in strict priority order — **first match wins**:
 > **Metric-gated:** CAT1 only fires when the active risk metric is `l_diversity`. PRAM invalidates frequency-count-based metrics (reid_95, k_anonymity, uniqueness). When gated out, the engine falls through to QR/MED/LOW rules. (DYN_CAT and CAT2 deleted in Spec 19 Phase 2 — self-contradictory.)
 | 6 | **ReID pattern** | QR0–QR4, MED1, MED1-high-supp | Risk distribution shape drives k/p |
 | 7 | **Low risk** | LOW1–LOW3 | ReID95 ≤20%, type-based |
-| 8 | **Distribution** | DP1–DP3 | Outliers, skewness, sensitive attributes |
-| 9 | **Uniqueness fallback** | HR1–HR5 | No ReID available |
-| 10 | **Default** | DEFAULT, EMERGENCY | Nothing else matched |
+| 8 | **Uniqueness fallback** | HR1–HR5 | No ReID available |
+| 9 | **Default** | DEFAULT, EMERGENCY | Nothing else matched |
 
 **Key decision boundary:** ReID95 >5% → structural method required (kANON or LOCSUPR).
 ReID95 ≤5% → perturbation may suffice (PRAM, NOISE). Perturbation methods cannot reduce
@@ -236,10 +235,10 @@ can actually optimise the chosen target.
 
 | Metric | Allowed methods | Blocked methods |
 |---|---|---|
-| ReID95 | kANON, LOCSUPR, PRAM, NOISE | None |
-| k-Anonymity | kANON, LOCSUPR | PRAM, NOISE |
-| Uniqueness | kANON, LOCSUPR | PRAM, NOISE |
-| l-Diversity | kANON, LOCSUPR, PRAM | NOISE |
+| ReID95 | kANON, LOCSUPR, PRAM, NOISE, GENERALIZE, GENERALIZE_FIRST | None |
+| k-Anonymity | kANON, LOCSUPR, GENERALIZE, GENERALIZE_FIRST | PRAM, NOISE |
+| Uniqueness | kANON, LOCSUPR, GENERALIZE, GENERALIZE_FIRST | PRAM, NOISE |
+| l-Diversity | kANON, LOCSUPR, PRAM, GENERALIZE, GENERALIZE_FIRST | NOISE |
 
 **Rationale:**
 
@@ -272,6 +271,27 @@ is only relevant when the user has explicitly selected l-diversity or ReID95 as 
 **Suppression clamping:** All kANON rules marked `†` (QR2–QR4, MED1, HR2, HR3)
 call `_clamp_k_by_suppression()` before committing to a k value — reducing k if estimated
 suppression at that k would exceed 30%.
+
+### Fallback Behavior
+
+The rule chain has two terminal fallbacks after all rule factories are exhausted:
+
+1. **DEFAULT_Fallback** — unconditional catch-all in `default_rules()`. Returns PRAM with
+   conservative parameters. Fires for any data shape that wasn't matched by earlier rules.
+2. **EMERGENCY_FALLBACK** — inline in `select_method_suite()`. Returns kANON(k=5) as the
+   absolute last resort. Only reachable if DEFAULT_Fallback is also blocked.
+
+**EMERGENCY_FALLBACK reachability conditions** (confirmed by Spec 22 Test 2):
+
+- `data_type != 'microdata'` — most rule factories only apply to microdata, so non-microdata
+  inputs skip the bulk of the chain.
+- `_risk_metric_type = 'k_anonymity'` (or `uniqueness`) — this causes the metric filter
+  (`_is_allowed()`) to block DEFAULT_Fallback's PRAM recommendation.
+- With PRAM blocked, DEFAULT_Fallback is skipped, and EMERGENCY_FALLBACK fires.
+
+This narrow reachability is intentional: for microdata inputs, the rule chain's 40+ rules
+and DEFAULT_Fallback always produce a result. EMERGENCY_FALLBACK exists solely as a safety
+net for edge-case non-microdata inputs under restrictive metrics.
 
 ### Pipeline Selection
 
